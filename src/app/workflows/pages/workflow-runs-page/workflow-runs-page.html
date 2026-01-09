@@ -1,0 +1,20 @@
+<h2>Runs</h2>
+
+@if (loading) {
+  <div>Loading...</div>
+}
+@if (error) {
+  <div style="color:red;">{{ error }}</div>
+}
+
+@for (r of runs; track r) {
+  <div style="border:1px solid #ddd; padding:10px; border-radius:10px; margin:10px 0;">
+    <div style="display:flex; justify-content:space-between;">
+      <div>
+        <div style="font-weight:600">Run {{ r.id }}</div>
+        <div style="font-size:12px; opacity:.7">{{ r.status }} • {{ r.startedAt | date:'short' }}</div>
+      </div>
+      <button (click)="open(r.id)">Open</button>
+    </div>
+  </div>
+}

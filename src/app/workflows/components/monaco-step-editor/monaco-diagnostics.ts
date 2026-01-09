@@ -1,0 +1,28 @@
+import * as monaco from "monaco-editor";
+import { applyLogicalDiagnostics } from "./logical-diagnostics";
+import { applyAntlrDiagnostics } from "./antlr-diagnostics";
+
+/**
+ * UI-only variable model for Monaco tooling.
+ * (Not part of backend DTOs anymore.)
+ */
+export interface WorkflowVar {
+  name: string;
+  kind: "bool" | "number" | "string" | "object" | "array" | "unknown";
+}
+
+export function applyWorkflowDiagnostics(
+  model: monaco.editor.ITextModel,
+  vars: WorkflowVar[]
+) {
+  const logical = applyLogicalDiagnostics(model);
+
+  // logical errors first (prevents cascade)
+  if (logical.length) {
+    monaco.editor.setModelMarkers(model, "workflow", logical);
+    return;
+  }
+
+  const antlr = applyAntlrDiagnostics(model);
+  monaco.editor.setModelMarkers(model, "workflow", antlr);
+}

@@ -1,0 +1,72 @@
+<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+  <div>
+    <h2 style="margin:0">{{ facade.workflow()?.name }}</h2>
+    <div style="font-size:12px; opacity:.7">
+      v{{ facade.workflow()?.version }}
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px;">
+    <button (click)="back()">Back</button>
+    <button (click)="saveWorkflow()" [disabled]="facade.saving()">Save</button>
+    <button (click)="runWorkflow()" [disabled]="facade.running()">Run</button>
+  </div>
+</div>
+
+@if (facade.error()) {
+  <div style="color:red; margin-bottom:10px;">
+    {{ facade.error() }}
+  </div>
+}
+
+<div style="display:grid; grid-template-columns: 260px 1fr 340px; gap:12px; height: calc(100vh - 170px);">
+  <!-- Left -->
+  <app-steps-sidebar
+    [steps]="facade.steps()"
+    [selectedStepId]="facade.selectedStepId()"
+    (selectStep)="facade.selectStep($event)"
+    (addStep)="facade.addStep('')"
+    (deleteLastStep)="facade.deleteLastStep()"
+  />
+
+  <!-- Center -->
+  <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+    <app-step-config-panel
+      [steps]="facade.steps()"
+      [step]="facade.selectedStep()"
+      (patchStep)="facade.patchStep($event.stepId, $event.patch)"
+    />
+
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button
+        (click)="saveScript()"
+        [disabled]="facade.saving() || !facade.selectedStep()"
+        title="Upload current script to backend"
+      >
+        Save Script
+      </button>
+    </div>
+
+    <div style="flex:1; min-height:0; border:1px solid #ddd; border-radius:10px; overflow:hidden;">
+      <app-monaco-step-editor
+        [code]="editorCode()"
+        [availableVariables]="[]"
+        (codeChange)="editorCode.set($event)"
+      />
+    </div>
+  </div>
+
+  <!-- Right -->
+  <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+    <app-inputs-panel
+      [stepId]="facade.selectedStep()?.id ?? null"
+      [inputs]="facade.selectedStepInputs()"
+      (uploadInput)="facade.uploadSelectedStepInput($event)"
+    />
+
+    <app-variables-panel
+      [availableVariables]="availableVariableStrings()"
+      [step]="facade.selectedStep()"
+    />
+  </div>
+</div>
