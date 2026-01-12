@@ -11,6 +11,11 @@ import type {
   StepInputs, UpdateStepRequest,
 } from "../models/workflow-models";
 import {WorkflowApi} from './workflows.api';
+import {WorkflowVar} from '../components/monaco-step-editor/workflow-vars';
+import {extractVarsFromCode} from '../components/monaco-step-editor/script-vars';
+import type { RunWorkflowResponse } from "../models/workflow-models";
+import { saveRun } from "./workflow-runs.store";
+
 
 @Injectable({ providedIn: "root" })
 export class WorkflowsFacade {
@@ -28,6 +33,14 @@ export class WorkflowsFacade {
 
   // NEW: inputs stored per step
   readonly stepInputsByStepId = signal<Record<Id, StepInputs>>({});
+  // Script per step (client-side cache)
+  readonly stepScriptByStepId = signal<Record<number, string>>({});
+
+// Vars extracted from each step script
+  readonly stepVarsByStepId = signal<Record<number, Record<string, WorkflowVar>>>({});
+
+// Global input vars (merged from uploaded input files)
+  readonly globalInputs = signal<Record<string, unknown>>({});
 
   // derived
   readonly steps = computed(() => this.stepsState());
@@ -41,6 +54,47 @@ export class WorkflowsFacade {
     if (id == null) return {};
     return this.stepInputsByStepId()[id] ?? {};
   });
+
+  readonly availableVariablesForSelectedStep = computed<WorkflowVar[]>(() => {
+    const steps = this.stepsState();
+    const selectedId = this.selectedStepId();
+    if (selectedId == null) return [];
+
+    const idx = steps.findIndex(s => s.id === selectedId);
+    if (idx < 0) return [];
+
+    const out: WorkflowVar[] = [];
+
+    // 1) global inputs => expose as input.VarName
+    const inputs = this.globalInputs();
+    for (const k of Object.keys(inputs ?? {})) {
+      out.push({ name: `input.${k}`, kind: "unknown", source: "input" });
+    }
+
+    // 2) vars from steps before current step
+    const varsByStep = this.stepVarsByStepId();
+    for (let i = 0; i < idx; i++) {
+      const sid = steps[i].id;
+      const m = varsByStep[sid];
+      if (!m) continue;
+
+      for (const v of Object.values(m)) {
+        // available by raw name (IDENTIFIER)
+        out.push(v);
+      }
+    }
+
+    // Unique by name (later wins)
+    const uniq = new Map<string, WorkflowVar>();
+    for (const v of out) uniq.set(v.name, v);
+
+    return [...uniq.values()].sort((a, b) => a.name.localeCompare(b.name));
+  });
+  readonly lastRun = signal<RunWorkflowResponse | null>(null);
+  readonly lastRunExtension = signal<string>(""); // optional
+
+
+
 
   // ------------ loading / init ------------
   async loadWorkflow(workflowId: Id) {
@@ -70,6 +124,27 @@ export class WorkflowsFacade {
       this.loading.set(false);
     }
   }
+
+  getStepScript(stepId: number): string {
+    return this.stepScriptByStepId()[stepId] ?? "";
+  }
+
+  onStepCodeChange(stepId: number, code: string) {
+    // store script
+    const scripts = { ...this.stepScriptByStepId() };
+    scripts[stepId] = code;
+    this.stepScriptByStepId.set(scripts);
+
+    // extract vars from code (LHS assignments)
+    const vars = extractVarsFromCode(code);
+    const map: Record<string, WorkflowVar> = {};
+    for (const v of vars) map[v.name] = { ...v, source: "step", stepId };
+
+    const all = { ...this.stepVarsByStepId() };
+    all[stepId] = map;
+    this.stepVarsByStepId.set(all);
+  }
+
 
   initNewWorkflow() {
     const now = new Date().toISOString();
@@ -117,6 +192,65 @@ export class WorkflowsFacade {
       updatedAt: item.updatedAt,
     };
   }
+
+  private setStepScript(stepId: number, code: string) {
+    // store script
+    const scripts = { ...this.stepScriptByStepId() };
+    scripts[stepId] = code;
+    this.stepScriptByStepId.set(scripts);
+
+    // extract vars from script
+    const vars = extractVarsFromCode(code);
+    const map: Record<string, WorkflowVar> = {};
+    for (const v of vars) map[v.name] = { ...v, source: "step", stepId };
+
+    const all = { ...this.stepVarsByStepId() };
+    all[stepId] = map;
+    this.stepVarsByStepId.set(all);
+  }
+
+  async saveSelectedStepScript() {
+    const step = this.selectedStep();
+    if (!step) return;
+
+    const script = this.getStepScript(step.id);
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      await firstValueFrom(this.api.uploadStepScript({ stepId: step.id, script }));
+      await this.refreshSteps(); // update runnable
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to save script");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async uploadSelectedStepInput(file: File) {
+    const step = this.selectedStep();
+    if (!step) return;
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
+
+      // Merge into global inputs (inputs usable in future steps)
+      const merged = { ...this.globalInputs(), ...(res.inputs ?? {}) };
+      this.globalInputs.set(merged);
+
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to upload input");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+
+
 
   // ------------ editing workflow metadata ------------
   patchWorkflow(patch: Partial<WorkflowDto>) {
@@ -190,27 +324,6 @@ export class WorkflowsFacade {
 
   selectStep(stepId: Id) {
     this.selectedStepId.set(stepId);
-  }
-
-  async uploadSelectedStepInput(file: File) {
-    const step = this.selectedStep();
-    if (!step) return;
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
-
-      // store inputs per step
-      const map = { ...this.stepInputsByStepId() };
-      map[step.id] = res.inputs ?? {};
-      this.stepInputsByStepId.set(map);
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to upload step input");
-    } finally {
-      this.saving.set(false);
-    }
   }
 
   // ------------ persistence (workflow only) ------------
@@ -299,22 +412,31 @@ export class WorkflowsFacade {
       this.saving.set(false);
     }
   }
-
-
-  // ------------ run workflow ------------
-  async runWorkflow() {
+  async runWorkflow(extension: string) {
     const wf = this.workflow();
-    if (!wf || !wf.id) return;
+    if (!wf?.id) return;
 
     this.running.set(true);
     this.error.set(null);
 
     try {
-      await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id }));
+      const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
+      this.lastRun.set(res);
+      this.lastRunExtension.set(extension);
+
+      // persist to local history (so Runs page can show multiple tables)
+      saveRun(wf.id, {
+        runId: crypto.randomUUID(),
+        workflowId: wf.id,
+        createdAt: new Date().toISOString(),
+        extension,
+        result: res,
+      });
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to run workflow");
     } finally {
       this.running.set(false);
     }
   }
+
 }

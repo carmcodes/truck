@@ -4,6 +4,33 @@ export type Id = number;
    Workflow
    ======================= */
 
+/* =======================
+   Run workflow
+   ======================= */
+
+export interface RunWorkflowRequest {
+  workflowId: Id;
+  extension: string; // ✅ required by new API
+}
+
+export interface RunStepRunDto {
+  stepId: Id;
+  stepName: string;
+  status: boolean;
+  cached: boolean;
+  logs: string; // API says string
+  outputs: {
+    variables: Record<string, unknown>;
+  };
+  exportFile: unknown | null;
+}
+
+export interface RunWorkflowResponse {
+  workflowId: Id;
+  stepRuns: RunStepRunDto[];
+}
+
+
 export interface WorkflowListItemDto {
   id: Id;
   name: string;
@@ -44,7 +71,6 @@ export interface UpdateWorkflowRequest {
 export interface RunWorkflowRequest {
   workflowId: Id;
 }
-export type RunWorkflowResponse = void;
 
 /* =======================
    Step

@@ -1,16 +1,10 @@
 import * as monaco from "monaco-editor";
 import { detectContextFromGrammar } from "./monaco-context";
+import type { WorkflowVar } from "./workflow-vars";
+
 
 let completionDisposable: monaco.IDisposable | null = null;
 
-/**
- * UI-only variable model for Monaco completion.
- * Not part of backend DTOs anymore.
- */
-export interface WorkflowVar {
-  name: string;
-  kind: "bool" | "number" | "string" | "object" | "array" | "unknown";
-}
 
 export function registerWorkflowCompletion(getVariables: () => WorkflowVar[]) {
   completionDisposable?.dispose();

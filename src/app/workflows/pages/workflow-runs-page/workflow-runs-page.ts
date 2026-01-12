@@ -1,42 +1,61 @@
-import { Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
-import {WorkflowApi} from '../../services/workflows.api';
+import { Component, computed, inject, signal } from "@angular/core";
+import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import { CommonModule } from "@angular/common";
+import type { Id, RunStepRunDto } from "../../models/workflow-models";
+import { clearRuns, loadRuns, type StoredRun } from "../../services/workflow-runs.store";
 
 @Component({
   standalone: true,
-  selector: 'app-workflow-runs-page',
-  imports: [CommonModule],
-  templateUrl: './workflow-runs-page.html',
+  selector: "app-workflow-runs-page",
+  imports: [CommonModule, RouterLink],
+  templateUrl: "./workflow-runs-page.html",
 })
 export class WorkflowRunsPage {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private api = inject(WorkflowApi);
 
-  workflowId = '';
-  loading = false;
-  error: string | null = null;
-  runs: any[] = [];
+  readonly workflowId = computed(() => Number(this.route.snapshot.paramMap.get("id")) as Id);
 
-  async ngOnInit() {
-    this.workflowId = this.route.snapshot.paramMap.get('id')!;
-    await this.load();
+  readonly runs = signal<StoredRun[]>([]);
+  readonly selectedRunId = signal<string | null>(null);
+  readonly expandedStepId = signal<number | null>(null);
+
+  readonly selectedRun = computed(() => {
+    const id = this.selectedRunId();
+    return this.runs().find(r => r.runId === id) ?? null;
+  });
+
+  ngOnInit() {
+    this.refresh();
   }
 
-  async load() {
-    this.loading = true;
-    this.error = null;
-    try {
-      // this.runs = await this.api.listRuns(this.workflowId).toPromise() ?? [];
-    } catch (e: any) {
-      this.error = e?.message ?? 'Failed to load runs';
-    } finally {
-      this.loading = false;
-    }
+  refresh() {
+    const list = loadRuns(this.workflowId());
+    this.runs.set(list);
+    this.selectedRunId.set(list[0]?.runId ?? null);
+    this.expandedStepId.set(null);
   }
 
-  open(runId: string) {
-    this.router.navigate(['/runs', runId]);
+  selectRun(runId: string) {
+    this.selectedRunId.set(runId);
+    this.expandedStepId.set(null);
+  }
+
+  toggleStep(stepId: number) {
+    this.expandedStepId.set(this.expandedStepId() === stepId ? null : stepId);
+  }
+
+  backToDesigner() {
+    this.router.navigate(["/workflows", this.workflowId(), "designer"]);
+  }
+
+  clearHistory() {
+    clearRuns(this.workflowId());
+    this.refresh();
+  }
+
+  // used in template (no arrow functions in HTML!)
+  stepStatusLabel(s: RunStepRunDto) {
+    return s.status ? "Succeeded" : "Failed";
   }
 }

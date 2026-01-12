@@ -9,7 +9,7 @@
   <div style="display:flex; gap:8px;">
     <button (click)="back()">Back</button>
     <button (click)="saveWorkflow()" [disabled]="facade.saving()">Save</button>
-    <button (click)="runWorkflow()" [disabled]="facade.running()">Run</button>
+    <button (click)="run()" [disabled]="facade.running()">Run</button>
   </div>
 </div>
 
@@ -49,10 +49,19 @@
 
     <div style="flex:1; min-height:0; border:1px solid #ddd; border-radius:10px; overflow:hidden;">
       <app-monaco-step-editor
-        [code]="editorCode()"
-        [availableVariables]="[]"
-        (codeChange)="editorCode.set($event)"
-      />
+        [code]="facade.selectedStep() ? facade.getStepScript(facade.selectedStep()!.id) : ''"
+        [availableVariables]="facade.availableVariablesForSelectedStep()"
+        (codeChange)="facade.selectedStep() && facade.onStepCodeChange(facade.selectedStep()!.id, $event)"
+      ></app-monaco-step-editor>
+
+      <button
+        (click)="facade.saveSelectedStepScript()"
+        [disabled]="facade.saving() || !facade.selectedStep()"
+      >
+        Save Script
+      </button>
+
+
     </div>
   </div>
 
@@ -60,13 +69,16 @@
   <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
     <app-inputs-panel
       [stepId]="facade.selectedStep()?.id ?? null"
-      [inputs]="facade.selectedStepInputs()"
+      [inputs]="facade.globalInputs()"
       (uploadInput)="facade.uploadSelectedStepInput($event)"
-    />
+    ></app-inputs-panel>
+
 
     <app-variables-panel
-      [availableVariables]="availableVariableStrings()"
       [step]="facade.selectedStep()"
-    />
+      [availableVariables]="availableVariableNames()"
+    ></app-variables-panel>
+
+
   </div>
 </div>

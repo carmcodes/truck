@@ -15,16 +15,8 @@ import { registerWorkflowLanguage } from "./monaco-language";
 import { registerWorkflowCompletion } from "./monaco-completion";
 import { applyWorkflowDiagnostics } from "./monaco-diagnostics";
 import { extractVarsFromCode } from "./script-vars";
+import type { WorkflowVar } from "./workflow-vars";
 
-/**
- * WorkflowVar no longer comes from backend models.
- * It's a UI-only concept for Monaco completion/diagnostics.
- */
-export type VarKind = "bool" | "number" | "string" | "object" | "array" | "unknown";
-export interface WorkflowVar {
-  name: string;
-  kind: VarKind;
-}
 
 @Component({
   standalone: true,

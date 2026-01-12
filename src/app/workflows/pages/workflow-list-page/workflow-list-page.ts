@@ -42,13 +42,13 @@ export class WorkflowListPage {
     this.router.navigate(["/workflows", id, "designer"]);
   }
 
-  async run(id: Id) {
+  async run(id: number) {
     try {
-      await firstValueFrom(this.api.runWorkflow({ workflowId: id }));
-      // optional: reload list in case version/updatedAt changes
-      await this.load();
+      await firstValueFrom(this.api.runWorkflow({ workflowId: id, extension: "json" }));
+      this.router.navigate(["/workflows", id, "runs"]);
     } catch (e: any) {
       this.error = e?.message ?? "Failed to run workflow";
     }
   }
+
 }

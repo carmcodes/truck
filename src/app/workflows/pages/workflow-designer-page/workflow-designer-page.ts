@@ -9,6 +9,7 @@ import { VariablesPanelComponent } from "../../components/variables-panel/variab
 
 import { WorkflowsFacade } from "../../services/workflows.facade";
 import type { Id } from "../../models/workflow-models";
+import {WorkflowVar} from '../../components/monaco-step-editor/workflow-vars';
 
 @Component({
   standalone: true,
@@ -36,10 +37,11 @@ export class WorkflowDesignerPage {
   readonly editorCode = signal<string>("");
 
   /** Very simple variables list derived from selected step inputs */
-  readonly availableVariableStrings = computed(() => {
-    const inputs = this.facade.selectedStepInputs();
-    return Object.keys(inputs ?? {}).map((k) => `input.${k}`);
+  readonly availableVariableNames = computed(() => {
+    const vars = this.facade.availableVariablesForSelectedStep() ?? [];
+    return vars.map((v: WorkflowVar) => v.name);
   });
+
 
   async ngOnInit() {
     const raw = this.route.snapshot.paramMap.get("id");
@@ -55,9 +57,16 @@ export class WorkflowDesignerPage {
     await this.facade.saveWorkflow();
   }
 
-  async runWorkflow() {
-    await this.facade.runWorkflow();
+  async run() {
+    const wf = this.facade.workflow();
+    if (!wf?.id) return;
+
+    const extension = "json"; // or bind a dropdown in UI
+    await this.facade.runWorkflow(extension);
+
+    this.router.navigate(["/workflows", wf.id, "runs"]);
   }
+
 
   async saveScript() {
     // uploads script for currently selected step

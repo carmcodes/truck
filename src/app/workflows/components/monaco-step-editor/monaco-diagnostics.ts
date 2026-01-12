@@ -1,15 +1,7 @@
 import * as monaco from "monaco-editor";
 import { applyLogicalDiagnostics } from "./logical-diagnostics";
 import { applyAntlrDiagnostics } from "./antlr-diagnostics";
-
-/**
- * UI-only variable model for Monaco tooling.
- * (Not part of backend DTOs anymore.)
- */
-export interface WorkflowVar {
-  name: string;
-  kind: "bool" | "number" | "string" | "object" | "array" | "unknown";
-}
+import type { WorkflowVar } from "./workflow-vars";
 
 export function applyWorkflowDiagnostics(
   model: monaco.editor.ITextModel,
