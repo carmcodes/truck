@@ -14,12 +14,12 @@ export const routes: Routes = [
         .then(m => m.WORKFLOWS_ROUTES),
   },
 
-  {
-    path: 'runs',
-    loadChildren: () =>
-      import('./runs/runs.routes')
-        .then(m => m.RUNS_ROUTES),
-  },
+  // {
+  //   path: 'runs',
+  //   loadChildren: () =>
+  //     import('./runs/runs.routes')
+  //       .then(m => m.RUNS_ROUTES),
+  // },
 
   {
     path: '**',

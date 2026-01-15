@@ -1,84 +1,243 @@
-<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
-  <div>
-    <h2 style="margin:0">{{ facade.workflow()?.name }}</h2>
-    <div style="font-size:12px; opacity:.7">
-      v{{ facade.workflow()?.version }}
-    </div>
-  </div>
+<!-- PAGE WRAPPER -->
+<div style="display:flex; flex-direction:column; gap:12px; padding:14px;">
 
-  <div style="display:flex; gap:8px;">
-    <button (click)="back()">Back</button>
-    <button (click)="saveWorkflow()" [disabled]="facade.saving()">Save</button>
-    <button (click)="run()" [disabled]="facade.running()">Run</button>
-  </div>
-</div>
+  <!-- TOP BAR -->
+  <div
+    style="
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      border:1px solid #e6e6e6;
+      border-radius:12px;
+      background:#fff;
+    "
+  >
+    <div style="min-width:0;">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        <h2 style="margin:0; font-size:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          {{ facade.workflow()?.name || 'Untitled workflow' }}
+        </h2>
 
-@if (facade.error()) {
-  <div style="color:red; margin-bottom:10px;">
-    {{ facade.error() }}
-  </div>
-}
+        <span
+          style="
+            font-size:12px;
+            padding:2px 8px;
+            border-radius:999px;
+            border:1px solid #e6e6e6;
+            background:#fafafa;
+            flex:0 0 auto;
+          "
+        >
+          v{{ facade.workflow()?.version ?? 0 }}
+        </span>
+      </div>
 
-<div style="display:grid; grid-template-columns: 260px 1fr 340px; gap:12px; height: calc(100vh - 170px);">
-  <!-- Left -->
-  <app-steps-sidebar
-    [steps]="facade.steps()"
-    [selectedStepId]="facade.selectedStepId()"
-    (selectStep)="facade.selectStep($event)"
-    (addStep)="facade.addStep('')"
-    (deleteLastStep)="facade.deleteLastStep()"
-  />
-
-  <!-- Center -->
-  <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
-    <app-step-config-panel
-      [steps]="facade.steps()"
-      [step]="facade.selectedStep()"
-      (patchStep)="facade.patchStep($event.stepId, $event.patch)"
-    />
-
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button
-        (click)="saveScript()"
-        [disabled]="facade.saving() || !facade.selectedStep()"
-        title="Upload current script to backend"
-      >
-        Save Script
-      </button>
+      <div style="margin-top:4px; font-size:12px; opacity:.75;">
+        Build steps, upload inputs, write scripts, run, then inspect runs.
+      </div>
     </div>
 
-    <div style="flex:1; min-height:0; border:1px solid #ddd; border-radius:10px; overflow:hidden;">
-      <app-monaco-step-editor
-        [code]="facade.selectedStep() ? facade.getStepScript(facade.selectedStep()!.id) : ''"
-        [availableVariables]="facade.availableVariablesForSelectedStep()"
-        (codeChange)="facade.selectedStep() && facade.onStepCodeChange(facade.selectedStep()!.id, $event)"
-      ></app-monaco-step-editor>
+    <div style="display:flex; gap:8px; align-items:center; flex:0 0 auto;">
+      <button (click)="back()">Back</button>
 
       <button
-        (click)="facade.saveSelectedStepScript()"
-        [disabled]="facade.saving() || !facade.selectedStep()"
+        (click)="saveWorkflow()"
+        [disabled]="facade.saving()"
+        style="font-weight:600;"
       >
-        Save Script
+        {{ facade.saving() ? 'Saving…' : 'Save' }}
       </button>
 
-
+      <button
+        (click)="run()"
+        [disabled]="facade.running()"
+        style="font-weight:700;"
+      >
+        {{ facade.running() ? 'Running…' : 'Run' }}
+      </button>
     </div>
   </div>
 
-  <!-- Right -->
-  <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
-    <app-inputs-panel
-      [stepId]="facade.selectedStep()?.id ?? null"
-      [inputs]="facade.globalInputs()"
-      (uploadInput)="facade.uploadSelectedStepInput($event)"
-    ></app-inputs-panel>
+  <!-- ERROR BANNER -->
+  @if (facade.error()) {
+    <div
+      style="
+        border:1px solid #ffd1d1;
+        background:#fff5f5;
+        color:#b00020;
+        padding:10px 12px;
+        border-radius:10px;
+      "
+    >
+      {{ facade.error() }}
+    </div>
+  }
 
+  <!-- MAIN GRID -->
+  <div style="display:grid; grid-template-columns: 280px 1fr 360px; gap:12px; height: calc(100vh - 180px);">
 
-    <app-variables-panel
-      [step]="facade.selectedStep()"
-      [availableVariables]="availableVariableNames()"
-    ></app-variables-panel>
+    <!-- LEFT: STEPS -->
+    <div style="min-width:0;">
+      <app-steps-sidebar
+        [steps]="facade.steps()"
+        [selectedStepId]="facade.selectedStepId()"
+        (selectStep)="facade.selectStep($event)"
+        (addStep)="facade.addStep('')"
+        (deleteLastStep)="facade.deleteLastStep()"
+      />
+    </div>
 
+    <!-- CENTER: DETAILS + EDITOR -->
+    <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
 
+      <!-- WORKFLOW DETAILS CARD -->
+      <div
+        style="
+          border:1px solid #e6e6e6;
+          border-radius:12px;
+          background:#fff;
+          padding:12px;
+        "
+      >
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-weight:800;">Details</div>
+          <div style="font-size:12px; opacity:.7;">
+            workflowId: {{ facade.workflow()?.id ?? '—' }}
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
+          <div>
+            <label style="font-size:12px; font-weight:700;">Name</label>
+            <input
+              style="width:100%; padding:8px 10px; border:1px solid #e6e6e6; border-radius:10px;"
+              [value]="facade.workflow()?.name ?? ''"
+              (input)="facade.patchWorkflow({ name: $any($event.target).value })"
+              placeholder="e.g., Daily report workflow"
+            />
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700;">Description</label>
+            <textarea
+              style="width:100%; height:70px; padding:8px 10px; border:1px solid #e6e6e6; border-radius:10px; resize:vertical;"
+              [value]="facade.workflow()?.description ?? ''"
+              (input)="facade.patchWorkflow({ description: $any($event.target).value })"
+              placeholder="What does this workflow do? What does it export?"
+            ></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP CONFIG -->
+      <div style="border:1px solid #e6e6e6; border-radius:12px; background:#fff; padding:12px;">
+        <app-step-config-panel
+          [steps]="facade.steps()"
+          [step]="facade.selectedStep()"
+          (patchStep)="facade.patchStep($event.stepId, $event.patch)"
+        />
+      </div>
+
+      <!-- SCRIPT EDITOR CARD -->
+      <div
+        style="
+          flex:1;
+          min-height:0;
+          border:1px solid #e6e6e6;
+          border-radius:12px;
+          background:#fff;
+          overflow:hidden;
+          display:flex;
+          flex-direction:column;
+        "
+      >
+        <!-- Editor toolbar -->
+        <div
+          style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:10px;
+            padding:10px 12px;
+            border-bottom:1px solid #eee;
+            background:#fafafa;
+          "
+        >
+          <div style="min-width:0;">
+            <div style="font-weight:800;">Script</div>
+            <div style="font-size:12px; opacity:.7;">
+              @if (facade.selectedStep()) {
+                Editing: {{ facade.selectedStep()?.name }}
+              } @else {
+                Select a step to edit its script.
+              }
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button
+              (click)="facade.saveSelectedStepScript()"
+              [disabled]="facade.saving() || !facade.selectedStep()"
+              style="font-weight:700;"
+              title="Saves this step script to the backend"
+            >
+              Save Script
+            </button>
+          </div>
+        </div>
+
+        <!-- Monaco editor -->
+        <div style="flex:1; min-height:0;">
+          <app-monaco-step-editor
+            [code]="facade.selectedStep() ? facade.getStepScript(facade.selectedStep()!.id) : ''"
+            [availableVariables]="facade.availableVariablesForSelectedStep()"
+            (codeChange)="facade.selectedStep() && facade.onStepCodeChange(facade.selectedStep()!.id, $event)"
+          ></app-monaco-step-editor>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: INPUTS + VARIABLES -->
+    <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+
+      <div style="border:1px solid #e6e6e6; border-radius:12px; background:#fff; padding:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-weight:800;">Inputs</div>
+          <div style="font-size:12px; opacity:.7;">Global</div>
+        </div>
+
+        <app-inputs-panel
+          [stepId]="facade.selectedStep()?.id ?? null"
+          [inputs]="facade.globalInputs()"
+          (uploadInput)="facade.uploadSelectedStepInput($event)"
+        ></app-inputs-panel>
+
+        <div style="font-size:12px; opacity:.7; margin-top:8px;">
+          Uploading inputs makes variables available to this step and all future steps.
+        </div>
+      </div>
+
+      <div style="border:1px solid #e6e6e6; border-radius:12px; background:#fff; padding:12px; flex:1; min-height:0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-weight:800;">Available Variables</div>
+          <div style="font-size:12px; opacity:.7;">
+            @if (facade.selectedStep()) { step scope } @else { — }
+          </div>
+        </div>
+
+        <app-variables-panel
+          [step]="facade.selectedStep()"
+          [availableVariables]="availableVariableNames()"
+        ></app-variables-panel>
+
+        <div style="font-size:12px; opacity:.7; margin-top:8px;">
+          Includes global inputs + variables declared in previous steps + current step.
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
