@@ -13,88 +13,198 @@
 
 <div style="display:grid; grid-template-columns: 280px 1fr; gap:12px; height: calc(100vh - 170px);">
   <!-- Left: run list -->
-  <div style="border:1px solid #ddd; border-radius:10px; padding:10px; overflow:auto;">
-    <div style="font-weight:700; margin-bottom:8px;">Run history</div>
+  <div style="border:1px solid #ddd; border-radius:12px; padding:10px; overflow:auto; background:#fff;">
+    <div style="font-weight:800; margin-bottom:8px;">Run history</div>
 
     @if (runs().length === 0) {
       <div style="opacity:.7;">No runs yet.</div>
+      <div style="font-size:12px; opacity:.7; margin-top:6px;">
+        Run the workflow from the designer to see results here.
+      </div>
     }
 
     @for (r of runs(); track r.runId) {
       <div
         (click)="selectRun(r.runId)"
         [style.background]="r.runId === selectedRunId() ? '#f2f2f2' : 'transparent'"
-        style="padding:10px; border:1px solid #eee; border-radius:10px; cursor:pointer; margin-bottom:6px;"
+        style="padding:10px; border:1px solid #eee; border-radius:12px; cursor:pointer; margin-bottom:8px;"
       >
-        <div style="font-weight:600;">Run {{ r.runId.slice(0, 8) }}</div>
-        <div style="font-size:12px; opacity:.7;">
+        <div style="font-weight:700;">Run {{ r.runId.slice(0, 8) }}</div>
+        <div style="font-size:12px; opacity:.75;">
           {{ r.createdAt | date:'short' }} • ext: {{ r.extension }}
+        </div>
+        <div style="font-size:12px; opacity:.6; margin-top:2px;">
+          steps: {{ r.result.stepRuns?.length ?? 0 }}
         </div>
       </div>
     }
   </div>
 
   <!-- Right: run details -->
-  <div style="border:1px solid #ddd; border-radius:10px; padding:10px; overflow:auto;">
+  <div style="border:1px solid #ddd; border-radius:12px; padding:12px; overflow:auto; background:#fff;">
     @if (!selectedRun()) {
       <div style="opacity:.7;">Select a run to view details.</div>
     }
 
     @if (selectedRun(); as run) {
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
         <div>
-          <div style="font-weight:800;">Run {{ run.runId }}</div>
+          <div style="font-weight:900; font-size:16px;">Run {{ run.runId }}</div>
           <div style="font-size:12px; opacity:.7;">
             {{ run.createdAt | date:'short' }} • extension: {{ run.extension }}
           </div>
         </div>
       </div>
 
-      <!-- Steps list like GitHub Actions -->
-      <div style="border:1px solid #eee; border-radius:10px; overflow:hidden;">
-        @for (s of run.result.stepRuns; track s.stepId) {
+      <div style="border:1px solid #eee; border-radius:12px; overflow:hidden;">
+        @for (step of run.result.stepRuns; track step.stepId; let i = $index) {
+
+          <!-- Step row -->
           <div
-            (click)="toggleStep(s.stepId)"
-            style="padding:10px; border-bottom:1px solid #eee; cursor:pointer;"
+            (click)="toggleStep(step.stepId)"
+            style="padding:12px; border-bottom:1px solid #eee; cursor:pointer;"
           >
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <div style="font-weight:600;">{{ s.stepName }}</div>
-                <div style="font-size:12px; opacity:.7;">
-                  {{ stepStatusLabel(s) }}
-                  • {{ s.cached ? "cached" : "fresh" }}
-                  • stepId: {{ s.stepId }}
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+              <div style="min-width:0;">
+                <div style="font-weight:800;">{{ step.stepName }}</div>
+                <div style="font-size:12px; opacity:.75; margin-top:2px;">
+                  <span style="padding:2px 8px; border-radius:999px; border:1px solid #e6e6e6; background:#fafafa;">
+                    {{ stepStatusLabel(step) }}
+                  </span>
+                  <span style="padding:2px 8px; border-radius:999px; border:1px solid #e6e6e6; background:#fafafa; margin-left:6px;">
+                    {{ step.cached ? 'Cached' : 'Fresh' }}
+                  </span>
+                  <span style="margin-left:8px;">stepId: {{ step.stepId }}</span>
                 </div>
               </div>
-              <div style="opacity:.6;">
-                {{ expandedStepId() === s.stepId ? "▾" : "▸" }}
+
+              <div style="opacity:.6; font-size:18px; line-height:1;">
+                {{ expandedStepId() === step.stepId ? "▾" : "▸" }}
               </div>
             </div>
+          </div>
 
-            @if (expandedStepId() === s.stepId) {
-              <div style="margin-top:10px; padding:10px; background:#fafafa; border-radius:10px;">
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                  <div>
-                    <div style="font-weight:700; margin-bottom:6px;">Variables</div>
-                    <pre style="margin:0; font-size:12px; background:white; border:1px solid #eee; padding:10px; border-radius:10px; max-height:220px; overflow:auto;">{{ s.outputs?.variables | json }}</pre>
-                  </div>
+          <!-- Expanded panel -->
+          @if (expandedStepId() === step.stepId) {
+            @let inVars = toVarRows(getInputVarsForStep(run.result.stepRuns, i));
+            @let outVars = toVarRows(getOutputVars(step));
+            @let lines = logLines(step.logs);
 
-                  <div>
-                    <div style="font-weight:700; margin-bottom:6px;">Outputs</div>
-                    <pre style="margin:0; font-size:12px; background:white; border:1px solid #eee; padding:10px; border-radius:10px; max-height:220px; overflow:auto;">{{ s.outputs | json }}</pre>
-                    <div style="font-size:12px; opacity:.7; margin-top:6px;">
-                      exportFile: {{ s.exportFile ? (s.exportFile | json) : "null" }}
+            <div style="padding:12px; border-bottom:1px solid #eee; background:#fafafa;">
+              <!-- Vars grid -->
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+
+                <!-- Input Variables -->
+                <div style="background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden;">
+                  <div style="padding:10px 12px; border-bottom:1px solid #eee;">
+                    <div style="font-weight:900;">Input variables</div>
+                    <div style="font-size:12px; opacity:.7; margin-top:2px;">
+                      Derived from previous step outputs
                     </div>
                   </div>
 
-                  <div style="grid-column: 1 / -1;">
-                    <div style="font-weight:700; margin-bottom:6px;">Logs</div>
-                    <pre style="margin:0; font-size:12px; background:#0b0f14; color:#e6edf3; padding:10px; border-radius:10px; max-height:260px; overflow:auto;">{{ s.logs }}</pre>
+                  @if (inVars.length === 0) {
+                    <div style="padding:12px; opacity:.7;">No input variables.</div>
+                  } @else {
+                    <div style="max-height:220px; overflow:auto;">
+                      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <thead style="position:sticky; top:0; background:#fafafa;">
+                        <tr>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Name</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Value</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Type</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                          @for (r of inVars; track r.key) {
+                            <tr>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2;"><code>{{ r.key }}</code></td>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px;">
+                                {{ r.value }}
+                              </td>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; opacity:.7;">
+                                {{ r.type }}
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  }
+                </div>
+
+                <!-- Output Variables -->
+                <div style="background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden;">
+                  <div style="padding:10px 12px; border-bottom:1px solid #eee;">
+                    <div style="font-weight:900;">Output variables</div>
+                    <div style="font-size:12px; opacity:.7; margin-top:2px;">
+                      From this step’s execution
+                    </div>
                   </div>
+
+                  @if (outVars.length === 0) {
+                    <div style="padding:12px; opacity:.7;">No output variables.</div>
+                  } @else {
+                    <div style="max-height:220px; overflow:auto;">
+                      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <thead style="position:sticky; top:0; background:#fafafa;">
+                        <tr>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Name</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Value</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Type</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                          @for (r of outVars; track r.key) {
+                            <tr>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2;"><code>{{ r.key }}</code></td>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px;">
+                                {{ r.value }}
+                              </td>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; opacity:.7;">
+                                {{ r.type }}
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  }
                 </div>
               </div>
-            }
-          </div>
+
+              <!-- Logs -->
+              <div style="margin-top:12px; background:#0b0f14; border-radius:12px; padding:10px; color:#e6edf3;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <div style="font-weight:900;">Logs</div>
+                  <button
+                    style="font-size:12px;"
+                    (click)="$event.stopPropagation(); navigator.clipboard.writeText(step.logs || '')"
+                  >
+                    Copy
+                  </button>
+                </div>
+
+                @if (lines.length === 0) {
+                  <div style="opacity:.7;">No logs.</div>
+                } @else {
+                  <div style="max-height:260px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size:12px; line-height:1.45;">
+                    @for (ln of lines; track $index) {
+                      <div style="display:flex; gap:12px;">
+                        <div style="width:36px; text-align:right; opacity:.45;">{{ $index + 1 }}</div>
+                        <div style="white-space:pre-wrap; word-break:break-word; flex:1;">{{ ln }}</div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+
+              <!-- Export file (if present) -->
+              <div style="font-size:12px; opacity:.7; margin-top:10px;">
+                exportFile: {{ step.exportFile ? (step.exportFile | json) : "null" }}
+              </div>
+            </div>
+          }
         }
       </div>
     }
