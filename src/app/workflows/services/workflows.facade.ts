@@ -41,6 +41,7 @@ export class WorkflowsFacade {
 
 // Global input vars (merged from uploaded input files)
   readonly globalInputs = signal<Record<string, unknown>>({});
+  readonly stepSyntaxErrors = signal<Record<number, string[]>>({});
 
   // derived
   readonly steps = computed(() => this.stepsState());
@@ -94,6 +95,22 @@ export class WorkflowsFacade {
   readonly lastRunExtension = signal<string>(""); // optional
 
 
+  setStepSyntaxErrors(stepId: number, errors: string[]) {
+    this.stepSyntaxErrors.update(m => ({ ...m, [stepId]: errors }));
+  }
+
+  hasAnySyntaxErrors(): boolean {
+    const m = this.stepSyntaxErrors();
+    return Object.values(m).some(list => (list?.length ?? 0) > 0);
+  }
+
+  getFirstSyntaxError(): string | null {
+    const m = this.stepSyntaxErrors();
+    for (const [sid, list] of Object.entries(m)) {
+      if (list?.length) return `Step ${sid}: ${list[0]}`;
+    }
+    return null;
+  }
 
 
   // ------------ loading / init ------------

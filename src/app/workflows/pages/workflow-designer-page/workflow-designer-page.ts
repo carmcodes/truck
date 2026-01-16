@@ -58,6 +58,12 @@ export class WorkflowDesignerPage {
   }
 
   async run() {
+    if (this.facade.hasAnySyntaxErrors()) {
+      this.facade.error.set(
+        "Fix syntax errors before running. " + (this.facade.getFirstSyntaxError() ?? "")
+      );
+      return;
+    }
     const wf = this.facade.workflow();
     if (!wf?.id) return;
 

@@ -10,7 +10,7 @@ export function registerWorkflowCompletion(getVariables: () => WorkflowVar[]) {
   completionDisposable?.dispose();
 
   completionDisposable = monaco.languages.registerCompletionItemProvider("workflowLang", {
-    triggerCharacters: [" ", ".", "(", "!", "="],
+    triggerCharacters: [' ', '(', '!', '=', '<', '>', ',',],
 
     provideCompletionItems: (model, position) => {
       const ctx = detectContextFromGrammar(model, position);
@@ -53,14 +53,35 @@ export function registerWorkflowCompletion(getVariables: () => WorkflowVar[]) {
 
       // ✅ IF / WHILE condition → boolean vars only
       if (ctx.kind === "IfCondition" || ctx.kind === "WhileCondition") {
-        for (const v of vars.filter((v) => v.kind === "bool")) variable(v);
+        // In your grammar, `expression` is general, not only boolean vars.
+        // Suggest all known vars + operators/constants helpful in conditions.
+        for (const v of vars) variable(v);
+
+        // constants
         keyword("true");
         keyword("false");
+        keyword("null");
+
+        // boolean ops
         keyword("!", "!");
         keyword("and", "and ");
         keyword("or", "or ");
+
+        // comparison ops (very common in conditions)
+        keyword("==", "== ");
+        keyword("!=", "!= ");
+        keyword(">=", ">= ");
+        keyword("<=", "<= ");
+        keyword(">", "> ");
+        keyword("<", "< ");
+
+        // parentheses helpers
+        keyword("(", "(");
+        keyword(")", ")");
+
         return { suggestions };
       }
+
 
       // default
       for (const v of vars) variable(v);

@@ -194,7 +194,9 @@
             [code]="facade.selectedStep() ? facade.getStepScript(facade.selectedStep()!.id) : ''"
             [availableVariables]="facade.availableVariablesForSelectedStep()"
             (codeChange)="facade.selectedStep() && facade.onStepCodeChange(facade.selectedStep()!.id, $event)"
+            (syntaxErrorsChange)="facade.selectedStep() && facade.setStepSyntaxErrors(facade.selectedStep()!.id, $event)"
           ></app-monaco-step-editor>
+
         </div>
       </div>
 

@@ -31,6 +31,7 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
   @Input() availableVariables: WorkflowVar[] = [];
 
   @Output() codeChange = new EventEmitter<string>();
+  @Output() syntaxErrorsChange = new EventEmitter<string[]>();
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private model?: monaco.editor.ITextModel;
@@ -38,6 +39,21 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
 
   private codeVars: WorkflowVar[] = [];
   private diagTimer: any;
+
+  private emitErrors() {
+    if (!this.model) return;
+    const markers = monaco.editor.getModelMarkers({
+      owner: "workflow",
+      resource: this.model.uri,
+    });
+
+    const errors = markers
+      .filter(m => m.severity === monaco.MarkerSeverity.Error)
+      .map(m => `Line ${m.startLineNumber}:${m.startColumn} — ${m.message}`);
+
+    this.syntaxErrorsChange.emit(errors);
+  }
+
 
   private getAllVars(): WorkflowVar[] {
     // external vars (uploaded inputs etc.) + local script vars
@@ -90,6 +106,11 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
 
     // initial diagnostics
     applyWorkflowDiagnostics(this.model, this.getAllVars());
+    this.diagTimer = setTimeout(() => {
+      applyWorkflowDiagnostics(this.model!, this.getAllVars());
+      this.emitErrors();
+    }, 200);
+
   }
 
   ngOnChanges(changes: SimpleChanges): void {
