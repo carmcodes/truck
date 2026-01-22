@@ -1,42 +1,18 @@
+// src/app/workflows/models/workflow-models.ts
+
 export type Id = number;
 
 /* =======================
    Workflow
    ======================= */
 
-/* =======================
-   Run workflow
-   ======================= */
-
-export interface RunWorkflowRequest {
-  workflowId: Id;
-  extension: string; // ✅ required by new API
-}
-
-export interface RunStepRunDto {
-  stepId: Id;
-  stepName: string;
-  status: boolean;
-  cached: boolean;
-  logs: string; // API says string
-  outputs: {
-    variables: Record<string, unknown>;
-  };
-  exportFile: unknown | null;
-}
-
-export interface RunWorkflowResponse {
-  workflowId: Id;
-  stepRuns: RunStepRunDto[];
-}
-
-
 export interface WorkflowListItemDto {
   id: Id;
   name: string;
+  description: string;
   version: number;
-  createdAt: string; // ISO string
-  updatedAt: string; // ISO string
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkflowDto {
@@ -64,12 +40,9 @@ export interface UpdateWorkflowRequest {
   version: number;
 }
 
-/**
- * PUT /api/Workflow/run
- * { workflowId: number }
- */
-export interface RunWorkflowRequest {
-  workflowId: Id;
+export interface ExportTypeDto {
+  name: string;
+  extension: string; // ".txt", ".json"
 }
 
 /* =======================
@@ -79,6 +52,7 @@ export interface RunWorkflowRequest {
 export interface StepDto {
   id: Id;
   name: string;
+  alias: string;
   description: string;
   cacheable: boolean;
   runnable: boolean;
@@ -88,15 +62,13 @@ export interface GetStepsResponse {
   steps: StepDto[];
 }
 
-/**
- * POST /api/Step (includes script)
- */
 export interface CreateStepRequest {
   name: string;
   description: string;
   cacheable: boolean;
-  workflowId: Id;
   script: string;
+  alias: string;
+  workflowId: Id;
 }
 
 export interface UpdateStepRequest {
@@ -104,30 +76,53 @@ export interface UpdateStepRequest {
   description: string;
   cacheable: boolean;
   stepId: Id;
+  alias: string;
 }
 
 export interface UploadStepScriptRequest {
   stepId: Id;
   script: string;
+  includedOutputs: string[]; // ✅ new
 }
 
 export interface UploadStepScriptResponse {
-  status: string;
+  status: string; // "successfully uploaded script"
 }
-
-/**
- * PUT /api/Step/input (multipart/form-data)
- * Fields: stepId (number) + file (File)
- * Response: { inputs: { ... } }
- */
-export type StepInputs = Record<string, unknown>;
 
 export interface UploadStepInputResponse {
-  inputs: StepInputs;
+  inputs: Record<string, unknown>;
 }
 
-/**
- * DELETE /api/Workflow/{workflowId}/Step
- * Deletes the final step of the workflow.
- */
-export type DeleteLastStepResponse = void;
+/* =======================
+   Run
+   ======================= */
+
+export interface RunWorkflowRequest {
+  workflowId: Id;
+  extension: string;
+}
+
+export interface RunStepRunDto {
+  stepId: Id;
+  stepName: string;
+  status: boolean;
+  cached: boolean;
+  logs: string;
+  outputs: {
+    variables: Record<string, unknown>; // e.g. { "Inputs.ALIAS.var1": 888 }
+  };
+  exportFile: string | null;
+}
+
+export interface RunWorkflowResponse {
+  workflowId: Id;
+  stepRuns: RunStepRunDto[];
+}
+
+/* =======================
+   Delete last step
+   ======================= */
+
+export interface DeleteLastStepResponse {
+  message: string; // "successfully deleted step 3."
+}

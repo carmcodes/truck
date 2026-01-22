@@ -1,7 +1,10 @@
+// src/app/workflows/services/workflows.api.ts
+
 import { Injectable } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
 import { Observable } from "rxjs";
-import {Id,
+import type {
+  Id,
   WorkflowDto,
   CreateWorkflowRequest,
   UpdateWorkflowRequest,
@@ -15,7 +18,9 @@ import {Id,
   UploadStepScriptRequest,
   UploadStepScriptResponse,
   UploadStepInputResponse,
-  GetWorkflowsResponse} from '../models/workflow-models';
+  GetWorkflowsResponse,
+  ExportTypeDto,
+} from "../models/workflow-models";
 
 @Injectable({ providedIn: "root" })
 export class WorkflowApi {
@@ -49,6 +54,10 @@ export class WorkflowApi {
     return this.http.put<RunWorkflowResponse>(`${this.baseUrl}/Workflow/run`, payload);
   }
 
+  /** ✅ NEW: export types */
+  getExportTypes(): Observable<ExportTypeDto[]> {
+    return this.http.get<ExportTypeDto[]>(`${this.baseUrl}/Workflow/export/types`);
+  }
 
   /* =======================
      Step
@@ -66,6 +75,7 @@ export class WorkflowApi {
     return this.http.put<StepDto>(`${this.baseUrl}/Step`, payload);
   }
 
+  /** ✅ updated: includes includedOutputs */
   uploadStepScript(payload: UploadStepScriptRequest): Observable<UploadStepScriptResponse> {
     return this.http.put<UploadStepScriptResponse>(`${this.baseUrl}/Step/script`, payload);
   }
@@ -76,7 +86,6 @@ export class WorkflowApi {
    */
   uploadStepInput(stepId: Id, file: File): Observable<UploadStepInputResponse> {
     const form = new FormData();
-    // common backend binding expects exact casing. If your backend uses "StepId", swap it.
     form.append("stepId", String(stepId));
     form.append("file", file);
 

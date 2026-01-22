@@ -1,3 +1,5 @@
+// src/app/workflows/services/workflows.facade.ts
+
 import { Injectable, computed, inject, signal } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 import type {
@@ -8,14 +10,15 @@ import type {
   CreateWorkflowRequest,
   UpdateWorkflowRequest,
   CreateStepRequest,
-  StepInputs, UpdateStepRequest,
+  UpdateStepRequest,
+  RunWorkflowResponse,
+  ExportTypeDto,
 } from "../models/workflow-models";
-import {WorkflowApi} from './workflows.api';
-import {WorkflowVar} from '../components/monaco-step-editor/workflow-vars';
-import {extractVarsFromCode} from '../components/monaco-step-editor/script-vars';
-import type { RunWorkflowResponse } from "../models/workflow-models";
-import { saveRun } from "./workflow-runs.store";
+import { WorkflowApi } from "./workflows.api";
 
+import type { WorkflowVar } from "../components/monaco-step-editor/workflow-vars";
+import { extractVarsFromCode } from "../components/monaco-step-editor/script-vars";
+import { saveRun } from "./workflow-runs.store";
 
 @Injectable({ providedIn: "root" })
 export class WorkflowsFacade {
@@ -31,31 +34,35 @@ export class WorkflowsFacade {
   readonly stepsState = signal<StepDto[]>([]);
   readonly selectedStepId = signal<Id | null>(null);
 
-  // NEW: inputs stored per step
-  readonly stepInputsByStepId = signal<Record<Id, StepInputs>>({});
   // Script per step (client-side cache)
   readonly stepScriptByStepId = signal<Record<number, string>>({});
 
-// Vars extracted from each step script
+  // Vars extracted from each step script (LHS assignments)
   readonly stepVarsByStepId = signal<Record<number, Record<string, WorkflowVar>>>({});
 
-// Global input vars (merged from uploaded input files)
+  // Global input vars (merged from uploaded input files) — raw keys (Var1, Var2)
   readonly globalInputs = signal<Record<string, unknown>>({});
+
+  // Syntax errors per step (Monaco -> facade)
   readonly stepSyntaxErrors = signal<Record<number, string[]>>({});
+
+  // ✅ NEW: included outputs selection per step (for PUT /api/Step/script)
+  readonly includedOutputsByStepId = signal<Record<number, string[]>>({});
+
+  // ✅ NEW: export type list (GET /api/Workflow/export/types)
+  readonly exportTypes = signal<ExportTypeDto[]>([]);
 
   // derived
   readonly steps = computed(() => this.stepsState());
+
   readonly selectedStep = computed(() => {
     const id = this.selectedStepId();
-    return id == null ? null : this.stepsState().find((s) => s.id === id) ?? null;
+    return id == null ? null : this.stepsState().find(s => s.id === id) ?? null;
   });
 
-  readonly selectedStepInputs = computed<StepInputs>(() => {
-    const id = this.selectedStepId();
-    if (id == null) return {};
-    return this.stepInputsByStepId()[id] ?? {};
-  });
-
+  // Monaco completion variables (must be IDENTIFIER-compatible → no dots)
+  // - include global input keys directly: Var1 (not input.Var1)
+  // - include vars from previous steps AND current step (so step can reuse its own vars)
   readonly availableVariablesForSelectedStep = computed<WorkflowVar[]>(() => {
     const steps = this.stepsState();
     const selectedId = this.selectedStepId();
@@ -66,34 +73,34 @@ export class WorkflowsFacade {
 
     const out: WorkflowVar[] = [];
 
-    // 1) global inputs => expose as input.VarName
+    // global inputs: Var1, Var2, ...
     const inputs = this.globalInputs();
     for (const k of Object.keys(inputs ?? {})) {
-      out.push({ name: `input.${k}`, kind: "unknown", source: "input" });
+      out.push({ name: k, kind: "unknown", source: "input" } as any);
     }
 
-    // 2) vars from steps before current step
+    // include vars from steps up to and including current step
     const varsByStep = this.stepVarsByStepId();
-    for (let i = 0; i < idx; i++) {
+    for (let i = 0; i <= idx; i++) {
       const sid = steps[i].id;
       const m = varsByStep[sid];
       if (!m) continue;
-
-      for (const v of Object.values(m)) {
-        // available by raw name (IDENTIFIER)
-        out.push(v);
-      }
+      for (const v of Object.values(m)) out.push(v);
     }
 
-    // Unique by name (later wins)
+    // unique by name
     const uniq = new Map<string, WorkflowVar>();
     for (const v of out) uniq.set(v.name, v);
-
     return [...uniq.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
-  readonly lastRun = signal<RunWorkflowResponse | null>(null);
-  readonly lastRunExtension = signal<string>(""); // optional
 
+  // Run state
+  readonly lastRun = signal<RunWorkflowResponse | null>(null);
+  readonly lastRunExtension = signal<string>("");
+
+  /* =======================
+     Syntax errors
+     ======================= */
 
   setStepSyntaxErrors(stepId: number, errors: string[]) {
     this.stepSyntaxErrors.update(m => ({ ...m, [stepId]: errors }));
@@ -112,28 +119,27 @@ export class WorkflowsFacade {
     return null;
   }
 
+  /* =======================
+     Workflow loading / init
+     ======================= */
 
-  // ------------ loading / init ------------
   async loadWorkflow(workflowId: Id) {
     this.loading.set(true);
     this.error.set(null);
 
     try {
       const listRes = await firstValueFrom(this.api.getWorkflows());
-      const item = listRes.workflows.find((w) => w.id === workflowId);
+      const item = listRes.workflows.find(w => w.id === workflowId);
 
       if (!item) {
         this.workflow.set(null);
         this.stepsState.set([]);
         this.selectedStepId.set(null);
-        this.stepInputsByStepId.set({});
         this.error.set("Workflow not found");
         return;
       }
 
-      const wf: WorkflowDto = this.mapListItemToWorkflowDto(item);
-      this.workflow.set(wf);
-
+      this.workflow.set(this.mapListItemToWorkflowDto(item));
       await this.refreshSteps();
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to load workflow");
@@ -142,48 +148,35 @@ export class WorkflowsFacade {
     }
   }
 
-  getStepScript(stepId: number): string {
-    return this.stepScriptByStepId()[stepId] ?? "";
-  }
-
-  onStepCodeChange(stepId: number, code: string) {
-    // store script
-    const scripts = { ...this.stepScriptByStepId() };
-    scripts[stepId] = code;
-    this.stepScriptByStepId.set(scripts);
-
-    // extract vars from code (LHS assignments)
-    const vars = extractVarsFromCode(code);
-    const map: Record<string, WorkflowVar> = {};
-    for (const v of vars) map[v.name] = { ...v, source: "step", stepId };
-
-    const all = { ...this.stepVarsByStepId() };
-    all[stepId] = map;
-    this.stepVarsByStepId.set(all);
-  }
-
-
   initNewWorkflow() {
     const now = new Date().toISOString();
-    const wf: WorkflowDto = {
+    this.workflow.set({
       id: 0,
       name: "New Workflow",
       description: "",
       version: 0,
       createdAt: now,
       updatedAt: now,
-    };
-
-    this.workflow.set(wf);
+    });
     this.stepsState.set([]);
     this.selectedStepId.set(null);
-    this.stepInputsByStepId.set({});
     this.error.set(null);
+  }
+
+  private mapListItemToWorkflowDto(item: WorkflowListItemDto): WorkflowDto {
+    return {
+      id: item.id,
+      name: item.name,
+      description: item.description ?? "",
+      version: item.version,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    };
   }
 
   private async refreshSteps() {
     const wf = this.workflow();
-    if (!wf || !wf.id) {
+    if (!wf?.id) {
       this.stepsState.set([]);
       this.selectedStepId.set(null);
       return;
@@ -193,83 +186,35 @@ export class WorkflowsFacade {
     const steps = res.steps ?? [];
     this.stepsState.set(steps);
 
-    // keep selection stable if possible
     const currentSel = this.selectedStepId();
-    const stillExists = currentSel != null && steps.some((s) => s.id === currentSel);
+    const stillExists = currentSel != null && steps.some(s => s.id === currentSel);
     this.selectedStepId.set(stillExists ? currentSel : steps[0]?.id ?? null);
   }
 
-  private mapListItemToWorkflowDto(item: WorkflowListItemDto): WorkflowDto {
-    return {
-      id: item.id,
-      name: item.name,
-      description: "",
-      version: item.version,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-    };
+  /* =======================
+     Scripts / vars
+     ======================= */
+
+  getStepScript(stepId: number): string {
+    return this.stepScriptByStepId()[stepId] ?? "";
   }
 
-  private setStepScript(stepId: number, code: string) {
+  onStepCodeChange(stepId: number, code: string) {
     // store script
-    const scripts = { ...this.stepScriptByStepId() };
-    scripts[stepId] = code;
-    this.stepScriptByStepId.set(scripts);
+    this.stepScriptByStepId.set({ ...this.stepScriptByStepId(), [stepId]: code });
 
-    // extract vars from script
+    // extract vars from code (LHS assignments)
     const vars = extractVarsFromCode(code);
     const map: Record<string, WorkflowVar> = {};
-    for (const v of vars) map[v.name] = { ...v, source: "step", stepId };
+    for (const v of vars) map[v.name] = { ...v, source: "step", stepId } as any;
 
-    const all = { ...this.stepVarsByStepId() };
-    all[stepId] = map;
-    this.stepVarsByStepId.set(all);
+    this.stepVarsByStepId.set({ ...this.stepVarsByStepId(), [stepId]: map });
   }
 
-  async saveSelectedStepScript() {
-    const step = this.selectedStep();
-    if (!step) return;
+  /* =======================
+     Workflow metadata
+     ======================= */
 
-    const script = this.getStepScript(step.id);
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      await firstValueFrom(this.api.uploadStepScript({ stepId: step.id, script }));
-      await this.refreshSteps(); // update runnable
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to save script");
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-  async uploadSelectedStepInput(file: File) {
-    const step = this.selectedStep();
-    if (!step) return;
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
-
-      // Merge into global inputs (inputs usable in future steps)
-      const merged = { ...this.globalInputs(), ...(res.inputs ?? {}) };
-      this.globalInputs.set(merged);
-
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to upload input");
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-
-
-
-  // ------------ editing workflow metadata ------------
   patchWorkflow(patch: Partial<WorkflowDto>) {
     const wf = this.workflow();
     if (!wf) return;
@@ -281,69 +226,6 @@ export class WorkflowsFacade {
     });
   }
 
-  // ------------ steps ------------
-  async addStep(script: string = "") {
-    let wf = this.workflow();
-    if (!wf) return;
-
-    // ✅ Auto-create the workflow if it's not saved yet
-    if (!wf.id || wf.id === 0) {
-      await this.saveWorkflow();
-      wf = this.workflow();
-
-      // If still no id, something failed in create
-      if (!wf?.id) return;
-    }
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      const payload = {
-        name: `Step ${this.stepsState().length + 1}`,
-        description: "",
-        cacheable: false,
-        workflowId: wf.id,
-        script,
-      };
-
-      const created = await firstValueFrom(this.api.createStep(payload));
-      this.stepsState.set([...this.stepsState(), created]);
-      this.selectedStepId.set(created.id);
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to add step");
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-
-  async deleteLastStep() {
-    const wf = this.workflow();
-    if (!wf || !wf.id) return;
-    if (this.stepsState().length === 0) return;
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      await firstValueFrom(this.api.deleteLastStep(wf.id));
-      await this.refreshSteps();
-      // NOTE: keep inputs map; backend deleted last step, but we don't know which id it was.
-      // optional cleanup: if you want, you can clear everything for safety:
-      // this.stepInputsByStepId.set({});
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to delete last step");
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-  selectStep(stepId: Id) {
-    this.selectedStepId.set(stepId);
-  }
-
-  // ------------ persistence (workflow only) ------------
   async saveWorkflow() {
     const wf = this.workflow();
     if (!wf) return;
@@ -357,7 +239,6 @@ export class WorkflowsFacade {
           name: wf.name,
           description: wf.description,
         };
-
         const created = await firstValueFrom(this.api.createWorkflow(payload));
         this.workflow.set(created);
         this.stepsState.set([]);
@@ -380,12 +261,55 @@ export class WorkflowsFacade {
       this.saving.set(false);
     }
   }
-  /**
-   * PATCH-like convenience for step update.
-   * Backend supports PUT /api/Step with: name, description, cacheable, stepId
-   */
+
+  /* =======================
+     Steps
+     ======================= */
+
+  selectStep(stepId: Id) {
+    this.selectedStepId.set(stepId);
+  }
+
+  async addStep(script: string = "") {
+    let wf = this.workflow();
+    if (!wf) return;
+
+    // auto-create workflow if new
+    if (!wf.id || wf.id === 0) {
+      await this.saveWorkflow();
+      wf = this.workflow();
+      if (!wf?.id) return;
+    }
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      const nextIndex = this.stepsState().length + 1;
+      const payload: CreateStepRequest = {
+        name: `Step ${nextIndex}`,
+        description: "",
+        cacheable: false,
+        script,
+        alias: `step${nextIndex}`, // ✅ default alias (UI can edit)
+        workflowId: wf.id,
+      };
+
+      const created = await firstValueFrom(this.api.createStep(payload));
+      this.stepsState.set([...this.stepsState(), created]);
+      this.selectedStepId.set(created.id);
+
+      // ensure local script cache is set too
+      this.stepScriptByStepId.set({ ...this.stepScriptByStepId(), [created.id]: script });
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to add step");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   async patchStep(stepId: Id, patch: Partial<StepDto>) {
-    const current = this.stepsState().find((s) => s.id === stepId);
+    const current = this.stepsState().find(s => s.id === stepId);
     if (!current) return;
 
     const payload: UpdateStepRequest = {
@@ -393,6 +317,7 @@ export class WorkflowsFacade {
       name: patch.name ?? current.name,
       description: patch.description ?? current.description,
       cacheable: patch.cacheable ?? current.cacheable,
+      alias: patch.alias ?? current.alias, // ✅ NEW
     };
 
     this.saving.set(true);
@@ -400,7 +325,7 @@ export class WorkflowsFacade {
 
     try {
       const updated = await firstValueFrom(this.api.updateStep(payload));
-      this.stepsState.set(this.stepsState().map((s) => (s.id === stepId ? updated : s)));
+      this.stepsState.set(this.stepsState().map(s => (s.id === stepId ? updated : s)));
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to update step");
     } finally {
@@ -408,11 +333,67 @@ export class WorkflowsFacade {
     }
   }
 
-  /**
-   * Upload script for currently selected step.
-   * PUT /api/Step/script { stepId, script }
-   */
-  async uploadSelectedStepScript(script: string) {
+  async deleteLastStep() {
+    const wf = this.workflow();
+    if (!wf?.id) return;
+    if (this.stepsState().length === 0) return;
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      await firstValueFrom(this.api.deleteLastStep(wf.id));
+      await this.refreshSteps();
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to delete last step");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /* =======================
+     Step script upload
+     ======================= */
+
+  /** ✅ selection state (checkboxes UI will call this later) */
+  setIncludedOutputs(stepId: number, outputs: string[]) {
+    this.includedOutputsByStepId.set({
+      ...this.includedOutputsByStepId(),
+      [stepId]: outputs,
+    });
+  }
+
+  getIncludedOutputs(stepId: number): string[] {
+    return this.includedOutputsByStepId()[stepId] ?? [];
+  }
+
+  async saveSelectedStepScript() {
+    const step = this.selectedStep();
+    if (!step) return;
+
+    const script = this.getStepScript(step.id);
+    const includedOutputs = this.getIncludedOutputs(step.id);
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      await firstValueFrom(
+        this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+      );
+      await this.refreshSteps(); // updates runnable flag
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to save script");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /* =======================
+     Step input upload
+     ======================= */
+
+  async uploadSelectedStepInput(file: File) {
     const step = this.selectedStep();
     if (!step) return;
 
@@ -420,18 +401,45 @@ export class WorkflowsFacade {
     this.error.set(null);
 
     try {
-      await firstValueFrom(this.api.uploadStepScript({ stepId: step.id, script }));
-      // refresh steps so runnable flag updates
-      await this.refreshSteps();
+      const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
+
+      // merge into global inputs (raw keys; usable in scripts)
+      const merged = { ...this.globalInputs(), ...(res.inputs ?? {}) };
+      this.globalInputs.set(merged);
     } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to upload script");
+      this.error.set(e?.message ?? "Failed to upload input");
     } finally {
       this.saving.set(false);
     }
   }
+
+  /* =======================
+     Export types
+     ======================= */
+
+  async loadExportTypes() {
+    try {
+      const types = await firstValueFrom(this.api.getExportTypes());
+      this.exportTypes.set(types ?? []);
+    } catch {
+      // non-blocking; UI can show fallback
+      this.exportTypes.set([]);
+    }
+  }
+
+  /* =======================
+     Run
+     ======================= */
+
   async runWorkflow(extension: string) {
     const wf = this.workflow();
     if (!wf?.id) return;
+
+    // ✅ frontend gate
+    if (this.hasAnySyntaxErrors()) {
+      this.error.set("Fix syntax errors before running. " + (this.getFirstSyntaxError() ?? ""));
+      return;
+    }
 
     this.running.set(true);
     this.error.set(null);
@@ -441,7 +449,7 @@ export class WorkflowsFacade {
       this.lastRun.set(res);
       this.lastRunExtension.set(extension);
 
-      // persist to local history (so Runs page can show multiple tables)
+      // Persist to local run history
       saveRun(wf.id, {
         runId: crypto.randomUUID(),
         workflowId: wf.id,
@@ -455,5 +463,4 @@ export class WorkflowsFacade {
       this.running.set(false);
     }
   }
-
 }
