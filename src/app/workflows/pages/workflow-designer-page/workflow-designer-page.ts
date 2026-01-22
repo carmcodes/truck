@@ -9,7 +9,6 @@ import { VariablesPanelComponent } from "../../components/variables-panel/variab
 
 import { WorkflowsFacade } from "../../services/workflows.facade";
 import type { Id } from "../../models/workflow-models";
-import {WorkflowVar} from '../../components/monaco-step-editor/workflow-vars';
 
 @Component({
   standalone: true,
@@ -28,20 +27,19 @@ export class WorkflowDesignerPage {
   private router = inject(Router);
   readonly facade = inject(WorkflowsFacade);
 
+  readonly workflow = computed(() => this.facade.workflow());
+  readonly selectedStep = computed(() => this.facade.selectedStep());
+
+  /** Export extension chosen by user (defaults to first export type once loaded) */
+  readonly runExtension = signal<string>(".json");
+  readonly availableVariableNamesForSelectedStep = computed(() =>
+    this.availableVariablesForSelectedStep().map(v => v.name)
+  );
+
   readonly isNew = computed(() => {
     const id = this.route.snapshot.paramMap.get("id");
     return !id;
   });
-
-  /** Local editor buffer (StepDto doesn't include script anymore) */
-  readonly editorCode = signal<string>("");
-
-  /** Very simple variables list derived from selected step inputs */
-  readonly availableVariableNames = computed(() => {
-    const vars = this.facade.availableVariablesForSelectedStep() ?? [];
-    return vars.map((v: WorkflowVar) => v.name);
-  });
-
 
   async ngOnInit() {
     const raw = this.route.snapshot.paramMap.get("id");
@@ -50,11 +48,22 @@ export class WorkflowDesignerPage {
       await this.facade.loadWorkflow(id);
     } else {
       this.facade.initNewWorkflow();
+      // For new workflows, export types can still be loaded (non-blocking)
     }
+
+    // load export types for the Run dropdown
+    await this.facade.loadExportTypes();
+    const types = this.facade.exportTypes();
+    if (types?.length) this.runExtension.set(types[0].extension);
   }
 
   async saveWorkflow() {
     await this.facade.saveWorkflow();
+  }
+
+  async saveScript() {
+    // ✅ now uses facade script cache + includedOutputs
+    await this.facade.saveSelectedStepScript();
   }
 
   async run() {
@@ -64,22 +73,31 @@ export class WorkflowDesignerPage {
       );
       return;
     }
+
     const wf = this.facade.workflow();
     if (!wf?.id) return;
 
-    const extension = "json"; // or bind a dropdown in UI
-    await this.facade.runWorkflow(extension);
+    await this.facade.runWorkflow(this.runExtension());
 
     this.router.navigate(["/workflows", wf.id, "runs"]);
   }
 
-
-  async saveScript() {
-    // uploads script for currently selected step
-    await this.facade.uploadSelectedStepScript(this.editorCode());
-  }
-
   back() {
     this.router.navigate(["/workflows"]);
+  }
+
+  /** Used by template: avoid arrow functions in HTML */
+  onStepSelected(stepId: Id) {
+    this.facade.selectStep(stepId);
+
+    // optional: ensure Monaco shows the saved draft buffer for this step
+    // (Monaco will bind directly to facade.getStepScript in HTML)
+  }
+
+  /** Used by template */
+  onCodeChange(code: string) {
+    const step = this.selectedStep();
+    if (!step) return;
+    this.facade.onStepCodeChange(step.id, code);
   }
 }
