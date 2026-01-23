@@ -7,31 +7,33 @@ import {
   OnChanges,
   Output,
   SimpleChanges,
-  ViewChild,
-} from "@angular/core";
-import * as monaco from "monaco-editor";
+  ViewChild, OnDestroy, inject
+} from '@angular/core';
+import * as monaco from 'monaco-editor';
 
-import { registerWorkflowLanguage } from "./monaco-language";
-import { registerWorkflowCompletion } from "./monaco-completion";
-import { applyWorkflowDiagnostics } from "./monaco-diagnostics";
-import { extractVarsFromCode } from "./script-vars";
-import type { WorkflowVar } from "./workflow-vars";
+import {registerWorkflowLanguage} from './monaco-language';
+import {registerWorkflowCompletion} from './monaco-completion';
+import {MonacoDiagnostics} from './monaco-diagnostics';
+import {extractVarsFromCode} from './script-vars';
+import type {WorkflowVar} from './workflow-vars';
 
 
 @Component({
   standalone: true,
-  selector: "app-monaco-step-editor",
-  template: `<div #host class="monaco-host"></div>`,
-  styleUrls: ["./monaco-step-editor.css"],
+  selector: 'app-monaco-step-editor',
+  template: '<div #host class="monaco-host"></div>',
+  styleUrls: ['./monaco-step-editor.scss']
 })
-export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
-  @ViewChild("host", { static: true }) host!: ElementRef<HTMLDivElement>;
+export class MonacoStepEditorComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @ViewChild('host', {static: true}) host!: ElementRef<HTMLDivElement>;
 
-  @Input() code = "";
+  @Input() code = '';
   @Input() availableVariables: WorkflowVar[] = [];
 
   @Output() codeChange = new EventEmitter<string>();
   @Output() syntaxErrorsChange = new EventEmitter<string[]>();
+
+  monacodiag = inject(MonacoDiagnostics);
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private model?: monaco.editor.ITextModel;
@@ -41,10 +43,12 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
   private diagTimer: any;
 
   private emitErrors() {
-    if (!this.model) return;
+    if (!this.model) {
+      return;
+    }
     const markers = monaco.editor.getModelMarkers({
-      owner: "workflow",
-      resource: this.model.uri,
+      owner: 'workflow',
+      resource: this.model.uri
     });
 
     const errors = markers
@@ -56,12 +60,14 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
 
 
   private getAllVars(): WorkflowVar[] {
-    // external vars (uploaded inputs etc.) + local script vars
     const map = new Map<string, WorkflowVar>();
 
-    // local first, external can override kind if known
-    for (const v of this.codeVars ?? []) map.set(v.name, v);
-    for (const v of this.availableVariables ?? []) map.set(v.name, v);
+    for (const v of this.codeVars ?? []) {
+      map.set(v.name, v);
+    }
+    for (const v of this.availableVariables ?? []) {
+      map.set(v.name, v);
+    }
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -69,62 +75,57 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges {
   ngAfterViewInit(): void {
     registerWorkflowLanguage();
 
-    this.model = monaco.editor.createModel(this.code ?? "", "workflowLang");
+    this.model = monaco.editor.createModel(this.code ?? '', 'workflowLang');
 
     this.editor = monaco.editor.create(this.host.nativeElement, {
       model: this.model,
       automaticLayout: true,
-      minimap: { enabled: false },
+      minimap: {enabled: false},
       suggestOnTriggerCharacters: true,
-      quickSuggestions: true,
+      quickSuggestions: true
     });
 
-    // initial local vars
-    this.codeVars = extractVarsFromCode(this.code ?? "") as WorkflowVar[];
+    this.codeVars = extractVarsFromCode(this.code ?? '') as WorkflowVar[];
 
-    // register completion (uses merged vars getter)
     registerWorkflowCompletion(() => this.getAllVars());
 
     this.disposers.push(
       this.model.onDidChangeContent(() => {
-        const val = this.model?.getValue() ?? "";
+        const val = this.model?.getValue() ?? '';
         this.codeChange.emit(val);
-
-        // update local vars so newly declared vars appear
         this.codeVars = extractVarsFromCode(val) as WorkflowVar[];
-
-        // refresh completion provider with latest getter
         registerWorkflowCompletion(() => this.getAllVars());
 
-        // diagnostics (debounced)
         clearTimeout(this.diagTimer);
         this.diagTimer = setTimeout(() => {
-          if (this.model) applyWorkflowDiagnostics(this.model, this.getAllVars());
+          if (this.model) {
+            this.monacodiag.applyWorkflowDiagnostics(this.model, this.getAllVars());
+          }
         }, 200);
       })
     );
 
-    // initial diagnostics
-    applyWorkflowDiagnostics(this.model, this.getAllVars());
+    this.monacodiag.applyWorkflowDiagnostics(this.model, this.getAllVars());
     this.diagTimer = setTimeout(() => {
-      applyWorkflowDiagnostics(this.model!, this.getAllVars());
+      this.monacodiag.applyWorkflowDiagnostics(this.model!, this.getAllVars());
       this.emitErrors();
     }, 200);
 
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.model) return;
-
-    if (changes["code"] && typeof this.code === "string" && this.code !== this.model.getValue()) {
-      this.model.setValue(this.code);
-      this.codeVars = extractVarsFromCode(this.code ?? "") as WorkflowVar[];
+    if (!this.model) {
+      return;
     }
 
-    if (changes["availableVariables"]) {
-      // update completion & diagnostics when external vars change
+    if (changes['code'] && typeof this.code === 'string' && this.code !== this.model.getValue()) {
+      this.model.setValue(this.code);
+      this.codeVars = extractVarsFromCode(this.code ?? '') as WorkflowVar[];
+    }
+
+    if (changes['availableVariables']) {
       registerWorkflowCompletion(() => this.getAllVars());
-      applyWorkflowDiagnostics(this.model, this.getAllVars());
+      this.monacodiag.applyWorkflowDiagnostics(this.model, this.getAllVars());
     }
   }
 

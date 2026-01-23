@@ -1,13 +1,14 @@
-import { Component, inject, signal } from '@angular/core';
+import {Component, inject, signal} from '@angular/core';
 
-import { ActivatedRoute, Router } from '@angular/router';
+import {ActivatedRoute, Router} from '@angular/router';
 import {WorkflowsFacade} from '../../services/workflows.facade';
 import {WorkflowApi} from '../../services/workflows.api';
+
 @Component({
   standalone: true,
   selector: 'app-workflow-run-page',
   imports: [],
-  templateUrl: './workflow-run-page.html',
+  templateUrl: './workflow-run-page.html'
 })
 export class WorkflowRunPage {
   private route = inject(ActivatedRoute);
@@ -19,7 +20,6 @@ export class WorkflowRunPage {
   running = signal(false);
   error = signal<string | null>(null);
 
-  // super-min runtime inputs (key/value). Replace with your real input UI.
   runtimeJson = signal<string>('{}');
 
   async ngOnInit() {
@@ -32,11 +32,11 @@ export class WorkflowRunPage {
     this.error.set(null);
 
     try {
-    //   const inputs = JSON.parse(this.runtimeJson());
-    //   const run = await this.api.startRun(this.workflowId, { inputs }).toPromise();
-    //   const runId = run?.id;
-    //   if (!runId) throw new Error('Run ID missing from backend response');
-    //   this.router.navigate(['/runs', runId]);
+      //   const inputs = JSON.parse(this.runtimeJson());
+      //   const run = await this.api.startRun(this.workflowId, { inputs }).toPromise();
+      //   const runId = run?.id;
+      //   if (!runId) throw new Error('Run ID missing from backend response');
+      //   this.router.navigate(['/runs', runId]);
     } catch (e: any) {
       this.error.set(e?.message ?? 'Failed to start run');
     } finally {

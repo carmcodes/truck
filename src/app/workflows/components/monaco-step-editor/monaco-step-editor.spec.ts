@@ -1,18 +1,18 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {MonacoStepEditorComponent} from './monaco-step-editor';
 
-import { MonacoStepEditor } from './monaco-step-editor';
 
 describe('MonacoStepEditor', () => {
-  let component: MonacoStepEditor;
-  let fixture: ComponentFixture<MonacoStepEditor>;
+  let component: MonacoStepEditorComponent;
+  let fixture: ComponentFixture<MonacoStepEditorComponent>;
 
-  beforeEach(async () => {
+  beforeEach(async() => {
     await TestBed.configureTestingModule({
-      imports: [MonacoStepEditor]
+      imports: [MonacoStepEditorComponent]
     })
-    .compileComponents();
+      .compileComponents();
 
-    fixture = TestBed.createComponent(MonacoStepEditor);
+    fixture = TestBed.createComponent(MonacoStepEditorComponent);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });

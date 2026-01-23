@@ -1,6 +1,6 @@
-<div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top: 15px">
   <h2>Workflows</h2>
-  <a routerLink="/workflows/new">+ New workflow</a>
+  <ds-button routerLink="/workflows/new">+ New workflow</ds-button>
 </div>
 
 @if (loading) {
@@ -12,23 +12,53 @@
 }
 
 @if (!loading) {
-  <div>
+  <div style="display: flex; gap: 30px">
     @for (w of items; track w.id) {
-      <div style="border:1px solid #ddd; padding:12px; margin:10px 0; border-radius:10px;">
-        <div style="display:flex; justify-content:space-between; gap:12px;">
-          <div>
-            <div style="font-weight:600">{{ w.name }}</div>
-            <div style="font-size:12px; opacity:.7">
-              v{{ w.version }} • {{ w.updatedAt | date:'short' }}
+      <div style="margin-top: 1rem; align-items: stretch;">
+        <div style="flex: 1; width: 300px; height: 100%" surfaceTone="default"
+        >
+          <header
+          >{{ w.name }}
+          </header>
+          <div
+          >
+            <div class="content">
+              <p class="description">{{ w.description }}</p>
             </div>
           </div>
-
-          <div style="display:flex; gap:8px; align-items:center;">
-            <button (click)="openDesigner(w.id)">Edit</button>
-            <button (click)="run(w.id)">Run</button>
+          <div style="display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  height: 100%;">
+            <button style="margin: 10px" (click)="openDesigner(w.id)">Edit</button>
+            <button style="margin: 10px" (click)="run(w.id)">Run</button>
           </div>
+
+          <!--          <a ds-button size="lg"-->
+          <!--             href="{{ dashboard().isAvailable ? '/dashboard/' + dashboard().guid : undefined}}"-->
+          <!--             target="_blank">{{ 'dashboardsButtons.open' | translate }}</a>-->
+          <!--          <a ds-button [variant]="`ghost`" class="external-button" href="{{ dashboard().externalLink }}"-->
+          <!--             target="_blank">{{ 'dashboardsButtons.external_link' | translate }}</a>-->
         </div>
+
       </div>
+      <!--      <div style="border:1px solid #ddd; padding:12px; margin:10px 0; border-radius:10px;">-->
+        <!--        <div style="display:flex; justify-content:space-between; gap:12px;">-->
+        <!--          <div>-->
+        <!--            <div style="font-weight:600">{{ w.name }}</div>-->
+        <!--            <div style="font-size:12px; opacity:.7">-->
+        <!--              v{{ w.version }} • {{ w.updatedAt | date:'short' }}-->
+        <!--            </div>-->
+        <!--          </div>-->
+
+        <!--          <div style="display:flex; gap:8px; align-items:center;">-->
+        <!--            <ds-button (click)="openDesigner(w.id)">Edit</ds-button>-->
+        <!--            <ds-button (click)="run(w.id)">Run</ds-button>-->
+        <!--          </div>-->
+        <!--        </div>-->
+        <!--      </div>-->
     }
   </div>
 }

@@ -1,18 +1,18 @@
-import { Component, inject } from "@angular/core";
-import { CommonModule } from "@angular/common";
-import { Router, RouterLink } from "@angular/router";
-import { firstValueFrom } from "rxjs";
+import {Component, inject, OnInit} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {Router, RouterLink} from '@angular/router';
+import {firstValueFrom} from 'rxjs';
 
-import type { WorkflowListItemDto, Id } from "../../models/workflow-models";
+import type {WorkflowListItemDto, Id} from '../../models/workflow-models';
 import {WorkflowApi} from '../../services/workflows.api';
 
 @Component({
   standalone: true,
-  selector: "app-workflows-list-page",
+  selector: 'app-workflows-list-page',
   imports: [CommonModule, RouterLink],
-  templateUrl: "./workflow-list-page.html",
+  templateUrl: './workflow-list-page.html'
 })
-export class WorkflowListPage {
+export class WorkflowListPage implements OnInit {
   private api = inject(WorkflowApi);
   private router = inject(Router);
 
@@ -32,22 +32,22 @@ export class WorkflowListPage {
       const res = await firstValueFrom(this.api.getWorkflows());
       this.items = res.workflows ?? [];
     } catch (e: any) {
-      this.error = e?.message ?? "Failed to load workflows";
+      this.error = e?.message ?? 'Failed to load workflows';
     } finally {
       this.loading = false;
     }
   }
 
   openDesigner(id: Id) {
-    this.router.navigate(["/workflows", id, "designer"]);
+    this.router.navigate(['/workflows', id, 'designer']);
   }
 
   async run(id: number) {
     try {
-      await firstValueFrom(this.api.runWorkflow({ workflowId: id, extension: "json" }));
-      this.router.navigate(["/workflows", id, "runs"]);
+      await firstValueFrom(this.api.runWorkflow({workflowId: id, extension: 'json'}));
+      this.router.navigate(['/workflows', id, 'runs']);
     } catch (e: any) {
-      this.error = e?.message ?? "Failed to run workflow";
+      this.error = e?.message ?? 'Failed to run workflow';
     }
   }
 

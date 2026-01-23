@@ -1,8 +1,8 @@
-import { ANTLRErrorListener, RecognitionException, Recognizer, Token } from 'antlr4ts';
+import {ANTLRErrorListener, RecognitionException, Recognizer, Token} from 'antlr4ts';
 
 export interface AntlrSyntaxError {
-  line: number;       // 1-based
-  column: number;     // 0-based (ANTLR)
+  line: number;
+  column: number;
   message: string;
   offendingToken?: Token;
 }
@@ -22,7 +22,7 @@ export class CollectingErrorListener implements ANTLRErrorListener<any> {
       line,
       column: charPositionInLine,
       message: msg,
-      offendingToken: _offendingSymbol as Token | undefined,
+      offendingToken: _offendingSymbol as Token | undefined
     });
   }
 }

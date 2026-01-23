@@ -1,4 +1,4 @@
-import * as monaco from "monaco-editor";
+import * as monaco from 'monaco-editor';
 
 /**
  * Grammar-compatible syntax diagnostics for Language.g4 (frontend version).
@@ -8,162 +8,213 @@ import * as monaco from "monaco-editor";
  */
 
 type TokType =
-  | "IDENT" | "INT" | "FLOAT" | "STRING" | "BOOL" | "NULL"
-  | "IF" | "ELSE" | "WHILE"
-  | "LPAREN" | "RPAREN" | "LBRACE" | "RBRACE"
-  | "COMMA"
-  | "EQ" | "EQEQ" | "NEQ" | "GT" | "LT" | "GTE" | "LTE"
-  | "PLUS" | "MINUS" | "STAR" | "SLASH"
-  | "NOT"
-  | "AND" | "OR"
-  | "NEWLINE"
-  | "EOF";
+  | 'IDENT' | 'INT' | 'FLOAT' | 'STRING' | 'BOOL' | 'NULL'
+  | 'IF' | 'ELSE' | 'WHILE'
+  | 'LPAREN' | 'RPAREN' | 'LBRACE' | 'RBRACE'
+  | 'COMMA'
+  | 'EQ' | 'EQEQ' | 'NEQ' | 'GT' | 'LT' | 'GTE' | 'LTE'
+  | 'PLUS' | 'MINUS' | 'STAR' | 'SLASH'
+  | 'NOT'
+  | 'AND' | 'OR'
+  | 'NEWLINE'
+  | 'EOF';
 
 type Tok = {
   t: TokType;
   text: string;
-  start: number; // absolute offset
-  end: number;   // absolute offset (exclusive)
-  line: number;  // 1-based
-  col: number;   // 1-based
+  start: number;
+  end: number;
+  line: number;
+  col: number;
 };
 
-function isAlpha(ch: string) { return /^[a-zA-Z_]$/.test(ch); }
-function isAlnum(ch: string) { return /^[a-zA-Z0-9_]$/.test(ch); }
-function isDigit(ch: string) { return /^[0-9]$/.test(ch); }
+function isAlpha(ch: string) {
+ return /^[a-zA-Z_]$/.test(ch);
+}
+function isAlnum(ch: string) {
+ return /^[a-zA-Z0-9_]$/.test(ch);
+}
+function isDigit(ch: string) {
+ return /^[0-9]$/.test(ch);
+}
 
 function tokenize(src: string): Tok[] {
   const toks: Tok[] = [];
   let i = 0, line = 1, col = 1;
 
   const push = (t: TokType, text: string, start: number, end: number, l: number, c: number) =>
-    toks.push({ t, text, start, end, line: l, col: c });
+    toks.push({t, text, start, end, line: l, col: c});
 
   const adv = (n = 1) => {
     for (let k = 0; k < n; k++) {
       const ch = src[i++];
-      if (ch === "\n") { line++; col = 1; }
-      else col++;
+      if (ch === '\n') {
+ line++; col = 1;
+} else {
+col++;
+}
     }
   };
 
   while (i < src.length) {
     const ch = src[i];
 
-    // whitespace (spaces/tabs only)
-    if (ch === " " || ch === "\t") { adv(); continue; }
+    if (ch === ' ' || ch === '\t') {
+ adv(); continue;
+}
 
-    // newline: accept \r\n or \n
-    if (ch === "\r") {
+    if (ch === '\r') {
       const l = line, c = col, start = i;
-      if (src[i + 1] === "\n") adv(2); else adv(1);
-      push("NEWLINE", "\\n", start, i, l, c);
+      if (src[i + 1] === '\n') {
+adv(2);
+} else {
+adv(1);
+}
+      push('NEWLINE', '\\n', start, i, l, c);
       continue;
     }
-    if (ch === "\n") {
+    if (ch === '\n') {
       const l = line, c = col, start = i;
       adv(1);
-      push("NEWLINE", "\\n", start, i, l, c);
+      push('NEWLINE', '\\n', start, i, l, c);
       continue;
     }
 
-    // single-char symbols
     const l = line, c = col, start = i;
-    if (ch === "(") { adv(); push("LPAREN", ch, start, i, l, c); continue; }
-    if (ch === ")") { adv(); push("RPAREN", ch, start, i, l, c); continue; }
-    if (ch === "{") { adv(); push("LBRACE", ch, start, i, l, c); continue; }
-    if (ch === "}") { adv(); push("RBRACE", ch, start, i, l, c); continue; }
-    if (ch === ",") { adv(); push("COMMA", ch, start, i, l, c); continue; }
-    if (ch === "+") { adv(); push("PLUS", ch, start, i, l, c); continue; }
-    if (ch === "-") { adv(); push("MINUS", ch, start, i, l, c); continue; }
-    if (ch === "*") { adv(); push("STAR", ch, start, i, l, c); continue; }
-    if (ch === "/") { adv(); push("SLASH", ch, start, i, l, c); continue; }
-    if (ch === "!") {
-      // != or !
-      if (src[i + 1] === "=") { adv(2); push("NEQ", "!=", start, i, l, c); }
-      else { adv(1); push("NOT", "!", start, i, l, c); }
+    if (ch === '(') {
+ adv(); push('LPAREN', ch, start, i, l, c); continue;
+}
+    if (ch === ')') {
+ adv(); push('RPAREN', ch, start, i, l, c); continue;
+}
+    if (ch === '{') {
+ adv(); push('LBRACE', ch, start, i, l, c); continue;
+}
+    if (ch === '}') {
+ adv(); push('RBRACE', ch, start, i, l, c); continue;
+}
+    if (ch === ',') {
+ adv(); push('COMMA', ch, start, i, l, c); continue;
+}
+    if (ch === '+') {
+ adv(); push('PLUS', ch, start, i, l, c); continue;
+}
+    if (ch === '-') {
+ adv(); push('MINUS', ch, start, i, l, c); continue;
+}
+    if (ch === '*') {
+ adv(); push('STAR', ch, start, i, l, c); continue;
+}
+    if (ch === '/') {
+ adv(); push('SLASH', ch, start, i, l, c); continue;
+}
+    if (ch === '!') {
+      if (src[i + 1] === '=') {
+ adv(2); push('NEQ', '!=', start, i, l, c);
+} else {
+ adv(1); push('NOT', '!', start, i, l, c);
+}
       continue;
     }
-    if (ch === "=") {
-      if (src[i + 1] === "=") { adv(2); push("EQEQ", "==", start, i, l, c); }
-      else { adv(1); push("EQ", "=", start, i, l, c); }
+    if (ch === '=') {
+      if (src[i + 1] === '=') {
+ adv(2); push('EQEQ', '==', start, i, l, c);
+} else {
+ adv(1); push('EQ', '=', start, i, l, c);
+}
       continue;
     }
-    if (ch === ">") {
-      if (src[i + 1] === "=") { adv(2); push("GTE", ">=", start, i, l, c); }
-      else { adv(1); push("GT", ">", start, i, l, c); }
+    if (ch === '>') {
+      if (src[i + 1] === '=') {
+ adv(2); push('GTE', '>=', start, i, l, c);
+} else {
+ adv(1); push('GT', '>', start, i, l, c);
+}
       continue;
     }
-    if (ch === "<") {
-      if (src[i + 1] === "=") { adv(2); push("LTE", "<=", start, i, l, c); }
-      else { adv(1); push("LT", "<", start, i, l, c); }
+    if (ch === '<') {
+      if (src[i + 1] === '=') {
+ adv(2); push('LTE', '<=', start, i, l, c);
+} else {
+ adv(1); push('LT', '<', start, i, l, c);
+}
       continue;
     }
 
-    // numbers: INT or FLOAT
     if (isDigit(ch)) {
       let j = i;
-      while (j < src.length && isDigit(src[j])) j++;
-      if (src[j] === "." && isDigit(src[j + 1] ?? "")) {
-        j++; // dot
-        while (j < src.length && isDigit(src[j])) j++;
+      while (j < src.length && isDigit(src[j])) {
+j++;
+}
+      if (src[j] === '.' && isDigit(src[j + 1] ?? '')) {
+        j++;
+        while (j < src.length && isDigit(src[j])) {
+j++;
+}
         const text = src.slice(i, j);
         const tokStart = i, tokLine = line, tokCol = col;
         adv(j - i);
-        push("FLOAT", text, tokStart, i, tokLine, tokCol);
+        push('FLOAT', text, tokStart, i, tokLine, tokCol);
       } else {
         const text = src.slice(i, j);
         const tokStart = i, tokLine = line, tokCol = col;
         adv(j - i);
-        push("INT", text, tokStart, i, tokLine, tokCol);
+        push('INT', text, tokStart, i, tokLine, tokCol);
       }
       continue;
     }
 
-    // strings
-    if (ch === `"` || ch === `'`) {
+    if (ch === '"' || ch === '\'') {
       const quote = ch;
       const tokStart = i, tokLine = line, tokCol = col;
       adv(1);
-      while (i < src.length && src[i] !== quote && src[i] !== "\n" && src[i] !== "\r") adv(1);
+      while (i < src.length && src[i] !== quote && src[i] !== '\n' && src[i] !== '\r') {
+adv(1);
+}
       if (i < src.length && src[i] === quote) {
         adv(1);
-        push("STRING", src.slice(tokStart, i), tokStart, i, tokLine, tokCol);
+        push('STRING', src.slice(tokStart, i), tokStart, i, tokLine, tokCol);
       } else {
-        // unterminated
-        push("STRING", src.slice(tokStart, i), tokStart, i, tokLine, tokCol);
-        // parser will report; stop here
+        push('STRING', src.slice(tokStart, i), tokStart, i, tokLine, tokCol);
       }
       continue;
     }
 
-    // identifiers & keywords
     if (isAlpha(ch)) {
       let j = i + 1;
-      while (j < src.length && isAlnum(src[j])) j++;
+      while (j < src.length && isAlnum(src[j])) {
+j++;
+}
       const text = src.slice(i, j);
       const tokStart = i, tokLine = line, tokCol = col;
       adv(j - i);
 
       const kw = text;
-      if (kw === "if") push("IF", text, tokStart, i, tokLine, tokCol);
-      else if (kw === "else") push("ELSE", text, tokStart, i, tokLine, tokCol);
-      else if (kw === "while") push("WHILE", text, tokStart, i, tokLine, tokCol);
-      else if (kw === "true" || kw === "false") push("BOOL", text, tokStart, i, tokLine, tokCol);
-      else if (kw === "null") push("NULL", text, tokStart, i, tokLine, tokCol);
-      else if (kw === "and") push("AND", text, tokStart, i, tokLine, tokCol);
-      else if (kw === "or") push("OR", text, tokStart, i, tokLine, tokCol);
-      else push("IDENT", text, tokStart, i, tokLine, tokCol);
+      if (kw === 'if') {
+push('IF', text, tokStart, i, tokLine, tokCol);
+} else if (kw === 'else') {
+push('ELSE', text, tokStart, i, tokLine, tokCol);
+} else if (kw === 'while') {
+push('WHILE', text, tokStart, i, tokLine, tokCol);
+} else if (kw === 'true' || kw === 'false') {
+push('BOOL', text, tokStart, i, tokLine, tokCol);
+} else if (kw === 'null') {
+push('NULL', text, tokStart, i, tokLine, tokCol);
+} else if (kw === 'and') {
+push('AND', text, tokStart, i, tokLine, tokCol);
+} else if (kw === 'or') {
+push('OR', text, tokStart, i, tokLine, tokCol);
+} else {
+push('IDENT', text, tokStart, i, tokLine, tokCol);
+}
       continue;
     }
 
-    // unknown char
-    push("EOF", ch, start, start + 1, l, c);
+    push('EOF', ch, start, start + 1, l, c);
     adv(1);
-    // keep going; parser will flag at this token position
   }
 
-  toks.push({ t: "EOF", text: "", start: src.length, end: src.length, line, col });
+  toks.push({t: 'EOF', text: '', start: src.length, end: src.length, line, col});
   return toks;
 }
 
@@ -172,102 +223,117 @@ class Parser {
   public errors: { message: string; tok: Tok }[] = [];
   constructor(private toks: Tok[]) {}
 
-  private cur(): Tok { return this.toks[this.i]; }
-  private at(t: TokType) { return this.cur().t === t; }
+  private cur(): Tok {
+ return this.toks[this.i];
+}
+  private at(t: TokType) {
+ return this.cur().t === t;
+}
   private eat(t: TokType, msg: string) {
-    if (this.at(t)) { this.i++; return; }
+    if (this.at(t)) {
+ this.i++; return;
+}
     this.err(msg);
   }
   private err(message: string) {
-    this.errors.push({ message, tok: this.cur() });
-    // basic recovery: skip current token (avoid infinite loop)
-    if (!this.at("EOF")) this.i++;
+    this.errors.push({message, tok: this.cur()});
+    if (!this.at('EOF')) {
+this.i++;
+}
   }
 
   parseProgram() {
-    while (!this.at("EOF")) {
-      // allow stray newlines
-      if (this.at("NEWLINE")) { this.i++; continue; }
+    while (!this.at('EOF')) {
+      if (this.at('NEWLINE')) {
+ this.i++; continue;
+}
       this.parseLine();
     }
   }
 
   parseLine() {
-    if (this.at("IF")) return this.parseIf();
-    if (this.at("WHILE")) return this.parseWhile();
+    if (this.at('IF')) {
+return this.parseIf();
+}
+    if (this.at('WHILE')) {
+return this.parseWhile();
+}
     return this.parseStatement();
   }
 
   parseStatement() {
-    // assignment or functionCall then NEWLINE
-    if (!this.at("IDENT")) {
-      this.err("Expected statement (assignment or function call)");
+    if (!this.at('IDENT')) {
+      this.err('Expected statement (assignment or function call)');
       this.syncToLineEnd();
       return;
     }
 
-    // lookahead: IDENT '=' ...  OR IDENT '(' ... ')'
     const ident = this.cur();
     this.i++;
 
-    if (this.at("EQ")) {
+    if (this.at('EQ')) {
       this.i++;
       this.parseExpression();
-      this.requireNewline("Expected newline after assignment");
+      this.requireNewline('Expected newline after assignment');
       return;
     }
 
-    if (this.at("LPAREN")) {
+    if (this.at('LPAREN')) {
       this.i++;
-      if (!this.at("RPAREN")) {
+      if (!this.at('RPAREN')) {
         this.parseExpression();
-        while (this.at("COMMA")) {
+        while (this.at('COMMA')) {
           this.i++;
           this.parseExpression();
         }
       }
-      this.eat("RPAREN", "Expected ')' to close function call");
-      this.requireNewline("Expected newline after function call");
+      this.eat('RPAREN', "Expected ')' to close function call");
+      this.requireNewline('Expected newline after function call');
       return;
     }
 
-    this.errors.push({ message: "Expected '=' for assignment or '(' for function call", tok: ident });
+    this.errors.push({message: "Expected '=' for assignment or '(' for function call", tok: ident});
     this.syncToLineEnd();
   }
 
   parseIf() {
-    this.eat("IF", "Expected 'if'");
+    this.eat('IF', "Expected 'if'");
     this.parseExpression();
     this.parseBlock();
-    if (this.at("ELSE")) {
+    if (this.at('ELSE')) {
       this.i++;
-      // elseIfBlock: block | ifBlock
-      if (this.at("IF")) this.parseIf();
-      else this.parseBlock();
+      if (this.at('IF')) {
+this.parseIf();
+} else {
+this.parseBlock();
+}
     }
   }
 
   parseWhile() {
-    this.eat("WHILE", "Expected 'while'");
+    this.eat('WHILE', "Expected 'while'");
     this.parseExpression();
     this.parseBlock();
   }
 
   parseBlock() {
-    this.eat("LBRACE", "Expected '{' to start block");
-    while (!this.at("RBRACE") && !this.at("EOF")) {
-      if (this.at("NEWLINE")) { this.i++; continue; }
+    this.eat('LBRACE', "Expected '{' to start block");
+    while (!this.at('RBRACE') && !this.at('EOF')) {
+      if (this.at('NEWLINE')) {
+ this.i++; continue;
+}
       this.parseLine();
     }
-    this.eat("RBRACE", "Expected '}' to close block");
+    this.eat('RBRACE', "Expected '}' to close block");
   }
 
-  // expression with precedence (matches your grammar)
-  parseExpression() { this.parseOr(); }
+  parseExpression() {
+ this.parseOr();
+}
 
   private parseOr() {
     this.parseAnd();
-    while (this.at("OR")) {
+    while (this.at('OR')) {
       this.i++;
       this.parseAnd();
     }
@@ -275,7 +341,7 @@ class Parser {
 
   private parseAnd() {
     this.parseCompare();
-    while (this.at("AND")) {
+    while (this.at('AND')) {
       this.i++;
       this.parseCompare();
     }
@@ -283,7 +349,7 @@ class Parser {
 
   private parseCompare() {
     this.parseAdd();
-    while (this.at("EQEQ") || this.at("NEQ") || this.at("GT") || this.at("LT") || this.at("GTE") || this.at("LTE")) {
+    while (this.at('EQEQ') || this.at('NEQ') || this.at('GT') || this.at('LT') || this.at('GTE') || this.at('LTE')) {
       this.i++;
       this.parseAdd();
     }
@@ -291,7 +357,7 @@ class Parser {
 
   private parseAdd() {
     this.parseMul();
-    while (this.at("PLUS") || this.at("MINUS")) {
+    while (this.at('PLUS') || this.at('MINUS')) {
       this.i++;
       this.parseMul();
     }
@@ -299,14 +365,14 @@ class Parser {
 
   private parseMul() {
     this.parseUnary();
-    while (this.at("STAR") || this.at("SLASH")) {
+    while (this.at('STAR') || this.at('SLASH')) {
       this.i++;
       this.parseUnary();
     }
   }
 
   private parseUnary() {
-    if (this.at("NOT")) {
+    if (this.at('NOT')) {
       this.i++;
       this.parseUnary();
       return;
@@ -315,51 +381,59 @@ class Parser {
   }
 
   private parsePrimary() {
-    if (this.at("INT") || this.at("FLOAT") || this.at("STRING") || this.at("BOOL") || this.at("NULL")) {
+    if (this.at('INT') || this.at('FLOAT') || this.at('STRING') || this.at('BOOL') || this.at('NULL')) {
       this.i++;
       return;
     }
 
-    if (this.at("IDENT")) {
+    if (this.at('IDENT')) {
       this.i++;
-      // functionCall inside expression: IDENT '(' ...
-      if (this.at("LPAREN")) {
+      if (this.at('LPAREN')) {
         this.i++;
-        if (!this.at("RPAREN")) {
+        if (!this.at('RPAREN')) {
           this.parseExpression();
-          while (this.at("COMMA")) { this.i++; this.parseExpression(); }
+          while (this.at('COMMA')) {
+ this.i++; this.parseExpression();
+}
         }
-        this.eat("RPAREN", "Expected ')' to close function call");
+        this.eat('RPAREN', "Expected ')' to close function call");
       }
       return;
     }
 
-    if (this.at("LPAREN")) {
+    if (this.at('LPAREN')) {
       this.i++;
       this.parseExpression();
-      this.eat("RPAREN", "Expected ')' after expression");
+      this.eat('RPAREN', "Expected ')' after expression");
       return;
     }
 
-    if (this.at("EOF") || this.at("NEWLINE") || this.at("RBRACE")) {
-      this.err("Expected expression");
+    if (this.at('EOF') || this.at('NEWLINE') || this.at('RBRACE')) {
+      this.err('Expected expression');
       return;
     }
 
-    this.err("Unexpected token in expression");
+    this.err('Unexpected token in expression');
   }
 
   private requireNewline(msg: string) {
-    // allow EOF at end without newline
-    if (this.at("EOF")) return;
-    if (this.at("NEWLINE")) { this.i++; return; }
+    if (this.at('EOF')) {
+return;
+}
+    if (this.at('NEWLINE')) {
+ this.i++; return;
+}
     this.err(msg);
     this.syncToLineEnd();
   }
 
   private syncToLineEnd() {
-    while (!this.at("NEWLINE") && !this.at("RBRACE") && !this.at("EOF")) this.i++;
-    if (this.at("NEWLINE")) this.i++;
+    while (!this.at('NEWLINE') && !this.at('RBRACE') && !this.at('EOF')) {
+this.i++;
+}
+    if (this.at('NEWLINE')) {
+this.i++;
+}
   }
 }
 
@@ -372,7 +446,7 @@ function toMarker(e: { message: string; tok: Tok }): monaco.editor.IMarkerData {
     startColumn: t.col,
     endLineNumber: t.line,
     endColumn: Math.max(t.col + 1, t.col + (t.end - t.start)),
-    source: "antlr",
+    source: 'antlr'
   };
 }
 
@@ -382,7 +456,6 @@ export function applyAntlrDiagnostics(model: monaco.editor.ITextModel): monaco.e
   const p = new Parser(toks);
   p.parseProgram();
 
-  // Filter out tokenizer "unknown char" we encoded as EOF token with text (rare)
   const markers = p.errors.map(toMarker);
 
   return markers;

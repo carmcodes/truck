@@ -4,17 +4,15 @@ import type { StepDto, Id } from "../../models/workflow-models";
 @Component({
   standalone: true,
   selector: "app-steps-sidebar",
-  imports: [],
+  imports: [
+  ],
   template: `
     <div style="border:1px solid #ddd; border-radius:12px; padding:12px; height:100%; overflow:auto; background:#fff;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;">
         <div>
           <div style="font-weight:900;">Steps</div>
-          <div style="font-size:12px; opacity:.7; margin-top:2px;">
-            Only the last step can be deleted (API limitation)
-          </div>
         </div>
-        <button (click)="addStep.emit()" style="padding:6px 10px; border-radius:10px;">
+        <button (click)="addStep.emit()" style="padding:6px 10px;">
           + Add
         </button>
       </div>
@@ -26,8 +24,8 @@ import type { StepDto, Id } from "../../models/workflow-models";
       } @else {
         @for (s of steps; track s.id; let i = $index) {
           <div
-            (click)="selectStep.emit(s.id)"
-            style="
+              (click)="selectStep.emit(s.id)"
+              style="
               padding:10px;
               border-radius:12px;
               cursor:pointer;
@@ -36,8 +34,8 @@ import type { StepDto, Id } from "../../models/workflow-models";
               background:#fff;
               transition: background .12s ease;
             "
-            [style.background]="s.id === selectedStepId ? '#f7f7f7' : '#fff'"
-            [style.borderLeft]="s.id === selectedStepId ? '4px solid #111' : '4px solid transparent'"
+              [style.background]="s.id === selectedStepId ? '#f7f7f7' : '#fff'"
+              [style.borderLeft]="s.id === selectedStepId ? '4px solid #111' : '4px solid transparent'"
           >
             <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
               <div style="min-width:0;">
@@ -46,19 +44,17 @@ import type { StepDto, Id } from "../../models/workflow-models";
                     {{ i + 1 }}. {{ s.name }}
                   </div>
 
-                  <!-- runnable badge -->
                   <span
-                    style="font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #e6e6e6; background:#fafafa;"
-                    [style.opacity]="s.runnable ? '1' : '.65'"
-                    title="Step is runnable only after script is uploaded"
+                      style="font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #e6e6e6; background:#fafafa;"
+                      [style.opacity]="s.runnable ? '1' : '.65'"
+                      title="Step is runnable only after script is uploaded"
                   >
                     {{ s.runnable ? "Runnable" : "Not runnable" }}
                   </span>
 
-                  <!-- cacheable badge -->
                   <span
-                    style="font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #e6e6e6; background:#fafafa;"
-                    title="If enabled, backend may reuse output when inputs don't change"
+                      style="font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #e6e6e6; background:#fafafa;"
+                      title="If enabled, backend may reuse output when inputs don't change"
                   >
                     {{ s.cacheable ? "Cacheable" : "No cache" }}
                   </span>
@@ -73,17 +69,16 @@ import type { StepDto, Id } from "../../models/workflow-models";
                   </span>
 
                   <span style="opacity:.7;">
-                    ID: {{ s.id }}
+                    ID: {{ s.stepNumber }}
                   </span>
                 </div>
               </div>
 
-              <!-- delete last only -->
               @if (i === steps.length - 1) {
                 <button
-                  (click)="onDeleteLast($event)"
-                  title="Delete last step"
-                  style="border-radius:10px; padding:6px 10px;"
+                    (click)="onDeleteLast($event)"
+                    title="Delete last step"
+                    style="padding:6px 10px;"
                 >
                   ✕
                 </button>
@@ -106,7 +101,6 @@ export class StepsSidebarComponent {
   @Output() selectStep = new EventEmitter<Id>();
   @Output() addStep = new EventEmitter<void>();
 
-  /** delete final step only */
   @Output() deleteLastStep = new EventEmitter<void>();
 
   onDeleteLast(ev: MouseEvent) {

@@ -1,72 +1,102 @@
-import { Component, Input } from "@angular/core";
-import type { StepDto } from "../../models/workflow-models";
+import {Component, EventEmitter, Input, Output} from '@angular/core';
+import type {Id, StepDto} from '../../models/workflow-models';
+import {WorkflowVar} from "../monaco-step-editor/workflow-vars";
 
 @Component({
   standalone: true,
-  selector: "app-variables-panel",
-  imports: [],
+  selector: 'app-variables-panel',
+  imports: [
+  ],
   template: `
-    <div style="border:1px solid #ddd; border-radius:12px; padding:12px; flex:1; overflow:auto; background:#fff;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+    <div style="border:1px solid #ddd; border-radius:12px; padding:12px; background:#fff;">
+    <div style="grid-column: 1 / -1; margin-top:6px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
         <div>
-          <div style="font-weight:900;">Available Variables</div>
-          <div style="font-size:12px; opacity:.7; margin-top:2px;">
-            Usable inside the script (IDENTIFIER-compatible)
+<!--          <div style="font-size:12px; font-weight:900;">Available Variables</div>-->
+          <div style="display:flex; gap:8px; align-content: flex-start; justify-content: space-between">
+            <div style="font-size:12px; font-weight:900;">Available Variables</div>-
+            <button
+                type="button"
+                style="font-size:12px;"
+                (click)="selectAll()"
+                [disabled]="!availableVariables?.length"
+            >
+              Select all
+            </button>
+            <button
+                type="button"
+                style="font-size:12px;"
+                (click)="clearAll()"
+                [disabled]="!includedOutputs?.length"
+            >
+              Clear
+            </button>
           </div>
+          <div style="font-size:12px; opacity:.7; margin-top:2px;">
+            Choose which available variables will be included in the step output display/export.
+          </div>
+
         </div>
 
-        @if (step) {
-          <span style="font-size:12px; opacity:.7;">
-            {{ availableVariables?.length ?? 0 }} vars
-          </span>
-        }
+
       </div>
 
-      @if (!step) {
-        <div style="opacity:.7;">Select a step to see available variables.</div>
-      }
+      @if (!availableVariables || availableVariables.length === 0) {
+        <div style="margin-top:10px; opacity:.7; font-size:12px; border:1px solid #ddd; border-radius:12px; padding:12px;">
+          No variables available yet. Add inputs or declare variables in scripts.
+        </div>
+      } @else {
+        <div style="margin-top:10px; border:1px solid #eee; border-radius:12px; padding:10px; max-height:180px; overflow:auto;">
+          @for (v of availableVariables; track v) {
+              <label style="display:flex; gap:8px; align-items:center; padding:6px 4px; border-bottom:1px solid #f3f3f3;">
+                <input
+                       type="checkbox"
+                       [checked]="isIncluded(v.name)"
+                       (change)="toggleIncluded(v.name, $any($event.target).checked)"
+                />
 
-      @if (step) {
-        <div style="font-size:12px; opacity:.7; margin-bottom:10px; line-height:1.4;">
-          Variables are collected from uploaded JSON inputs and variables declared in scripts
-          (previous steps + current step).
+                <code>{{ ' ' + v.name }}</code>
+              </label>
+          }
         </div>
 
-        @if (!availableVariables || availableVariables.length === 0) {
-          <div style="opacity:.7;">No variables detected.</div>
-        } @else {
-          <div style="display:flex; flex-direction:column; gap:6px;">
-            @for (v of availableVariables; track v) {
-              <div
-                style="
-                  padding:7px 10px;
-                  border:1px solid #eee;
-                  border-radius:12px;
-                  background:#fafafa;
-                  display:flex;
-                  justify-content:space-between;
-                  align-items:center;
-                  gap:10px;
-                "
-              >
-                <code style="font-size:12px;">{{ v }}</code>
-              </div>
-            }
-          </div>
-        }
+        <div style="font-size:12px; opacity:.7; margin-top:8px;">
+          Selected: {{ includedOutputs?.length ?? 0 }} / {{ availableVariables.length }}
+        </div>
       }
     </div>
-  `,
+    </div>
+  `
 })
 export class VariablesPanelComponent {
   @Input() step: StepDto | null = null;
+  @Input({required: true}) availableVariables: WorkflowVar[] = [];
+  @Input() steps: StepDto[] = [];
+  @Input() includedOutputs: string[] = [];
+  @Output() patchStep = new EventEmitter<{ stepId: Id; patch: Partial<StepDto> }>();
+  @Output() includedOutputsChange = new EventEmitter<{ stepId: Id; includedOutputs: string[] }>();
 
-  /**
-   * Expect raw IDENTIFIER-safe variable names:
-   * - Var1
-   * - total
-   * - x
-   * (No dots, because your grammar IDENTIFIER doesn't allow them)
-   */
-  @Input({ required: true }) availableVariables: string[] = [];
+  selectAll() {
+    if (!this.step) return;
+    this.includedOutputsChange.emit({ stepId: this.step.id, includedOutputs: [...(this.availableVariables.map(value => value.name) ?? [])] });
+  }
+
+  clearAll() {
+    if (!this.step) return;
+    this.includedOutputsChange.emit({ stepId: this.step.id, includedOutputs: [] });
+  }
+
+  isIncluded(v: string): boolean {
+    return (this.includedOutputs ?? []).includes(v);
+  }
+
+  toggleIncluded(v: string, checked: boolean) {
+    if (!this.step) return;
+
+    const set = new Set(this.includedOutputs ?? []);
+    if (checked) set.add(v);
+    else set.delete(v);
+
+    this.includedOutputsChange.emit({ stepId: this.step.id, includedOutputs: [...set] });
+  }
 }

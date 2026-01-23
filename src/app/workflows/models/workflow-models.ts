@@ -1,10 +1,4 @@
-// src/app/workflows/models/workflow-models.ts
-
 export type Id = number;
-
-/* =======================
-   Workflow
-   ======================= */
 
 export interface WorkflowListItemDto {
   id: Id;
@@ -42,12 +36,8 @@ export interface UpdateWorkflowRequest {
 
 export interface ExportTypeDto {
   name: string;
-  extension: string; // ".txt", ".json"
+  extension: string;
 }
-
-/* =======================
-   Step
-   ======================= */
 
 export interface StepDto {
   id: Id;
@@ -56,6 +46,7 @@ export interface StepDto {
   description: string;
   cacheable: boolean;
   runnable: boolean;
+  stepNumber: number;
 }
 
 export interface GetStepsResponse {
@@ -82,20 +73,16 @@ export interface UpdateStepRequest {
 export interface UploadStepScriptRequest {
   stepId: Id;
   script: string;
-  includedOutputs: string[]; // ✅ new
+  includedOutputs: string[];
 }
 
 export interface UploadStepScriptResponse {
-  status: string; // "successfully uploaded script"
+  status: string;
 }
 
 export interface UploadStepInputResponse {
   inputs: Record<string, unknown>;
 }
-
-/* =======================
-   Run
-   ======================= */
 
 export interface RunWorkflowRequest {
   workflowId: Id;
@@ -109,7 +96,7 @@ export interface RunStepRunDto {
   cached: boolean;
   logs: string;
   outputs: {
-    variables: Record<string, unknown>; // e.g. { "Inputs.ALIAS.var1": 888 }
+    variables: Record<string, unknown>;
   };
   exportFile: string | null;
 }
@@ -119,10 +106,6 @@ export interface RunWorkflowResponse {
   stepRuns: RunStepRunDto[];
 }
 
-/* =======================
-   Delete last step
-   ======================= */
-
 export interface DeleteLastStepResponse {
-  message: string; // "successfully deleted step 3."
+  message: string;
 }

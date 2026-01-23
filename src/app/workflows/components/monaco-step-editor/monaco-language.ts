@@ -3,10 +3,12 @@ import * as monaco from 'monaco-editor';
 let registered = false;
 
 export function registerWorkflowLanguage() {
-  if (registered) return;
+  if (registered) {
+return;
+}
   registered = true;
 
-  monaco.languages.register({ id: 'workflowLang' });
+  monaco.languages.register({id: 'workflowLang'});
 
   monaco.languages.setMonarchTokensProvider('workflowLang', {
     tokenizer: {
@@ -14,24 +16,24 @@ export function registerWorkflowLanguage() {
         [/\b(if|else|forEach|switch|case|default|return|let|var|const)\b/, 'keyword'],
         [/[a-zA-Z_]\w*/, 'identifier'],
         [/"([^"\\]|\\.)*$/, 'string.invalid'],
-        [/"/, { token: 'string.quote', bracket: '@open', next: '@string' }],
+        [/"/, {token: 'string.quote', bracket: '@open', next: '@string'}],
         [/[{}()\[\]]/, '@brackets'],
         [/[0-9]+(\.[0-9]+)?/, 'number'],
-        [/\/\/.*/, 'comment'],
+        [/\/\/.*/, 'comment']
       ],
       string: [
         [/[^\\"]+/, 'string'],
         [/\\./, 'string.escape'],
-        [/"/, { token: 'string.quote', bracket: '@close', next: '@pop' }],
-      ],
-    },
+        [/"/, {token: 'string.quote', bracket: '@close', next: '@pop'}]
+      ]
+    }
   });
 
   monaco.editor.defineTheme('workflowTheme', {
     base: 'vs',
     inherit: true,
     rules: [],
-    colors: {},
+    colors: {}
   });
 
   monaco.editor.setTheme('workflowTheme');

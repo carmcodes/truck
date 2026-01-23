@@ -2,7 +2,7 @@ import {
   ANTLRErrorListener,
   RecognitionException,
   Recognizer,
-  Token,
+  Token
 } from 'antlr4ts';
 
 export interface AntlrError {
@@ -27,7 +27,7 @@ export class CollectingErrorListener implements ANTLRErrorListener<any> {
       line,
       column: charPositionInLine,
       message: msg,
-      offendingToken: offendingSymbol as Token,
+      offendingToken: offendingSymbol as Token
     });
   }
 }

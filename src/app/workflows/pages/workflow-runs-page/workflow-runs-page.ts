@@ -1,20 +1,20 @@
-import { Component, computed, inject, signal } from "@angular/core";
-import { ActivatedRoute, Router, RouterLink } from "@angular/router";
-import { CommonModule } from "@angular/common";
-import type { Id, RunStepRunDto } from "../../models/workflow-models";
-import { clearRuns, loadRuns, type StoredRun } from "../../services/workflow-runs.store";
+import {Component, computed, inject, signal, OnInit} from '@angular/core';
+import {ActivatedRoute, Router, RouterLink} from '@angular/router';
+import {CommonModule} from '@angular/common';
+import type {Id, RunStepRunDto} from '../../models/workflow-models';
+import {clearRuns, loadRuns, type StoredRun} from '../../services/workflow-run.store';
 
 @Component({
   standalone: true,
-  selector: "app-workflow-runs-page",
+  selector: 'app-workflow-runs-page',
   imports: [CommonModule],
-  templateUrl: "./workflow-runs-page.html",
+  templateUrl: './workflow-runs-page.html'
 })
-export class WorkflowRunsPage {
+export class WorkflowRunsPage implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
-  readonly workflowId = computed(() => Number(this.route.snapshot.paramMap.get("id")) as Id);
+  readonly workflowId = computed(() => Number(this.route.snapshot.paramMap.get('id')) as Id);
 
   readonly runs = signal<StoredRun[]>([]);
   readonly selectedRunId = signal<string | null>(null);
@@ -46,7 +46,7 @@ export class WorkflowRunsPage {
   }
 
   backToDesigner() {
-    this.router.navigate(["/workflows", this.workflowId(), "designer"]);
+    this.router.navigate(['/workflows', this.workflowId(), 'designer']);
   }
 
   clearHistory() {
@@ -54,23 +54,23 @@ export class WorkflowRunsPage {
     this.refresh();
   }
 
-  // used in template (no arrow functions in HTML!)
   stepStatusLabel(s: RunStepRunDto) {
-    return s.status ? "Succeeded" : "Failed";
+    return s.status ? 'Succeeded' : 'Failed';
   }
 
   getOutputVars(step: RunStepRunDto): Record<string, unknown> {
     return step.outputs?.variables ?? {};
   }
 
-  /** Input vars for the step = previous step outputs (or empty for first step) */
   getInputVarsForStep(runSteps: RunStepRunDto[], index: number): Record<string, unknown> {
-    if (index <= 0) return {};
-    const prev = runSteps[index - 1];
-    return prev?.outputs?.variables ?? {};
+    const vars: Record<string, unknown> = {};
+    for (let i = 0; i < index; i++) {
+      const out = runSteps[i]?.outputs?.variables ?? {};
+      Object.assign(vars, out);
+    }
+    return vars;
   }
 
-  /** Convert a vars object into display rows */
   toVarRows(vars: Record<string, unknown>): { key: string; value: string; type: string }[] {
     const rows: { key: string; value: string; type: string }[] = [];
 
@@ -80,24 +80,33 @@ export class WorkflowRunsPage {
       rows.push({
         key: k,
         value: this.formatValue(v),
-        type: this.valueType(v),
+        type: this.valueType(v)
       });
     }
     return rows;
   }
 
   valueType(v: unknown): string {
-    if (v === null) return "null";
-    if (Array.isArray(v)) return "array";
-    return typeof v; // string/number/boolean/object/undefined
+    if (v === null) {
+      return 'null';
+    }
+    if (Array.isArray(v)) {
+      return 'array';
+    }
+    return typeof v;
   }
 
   formatValue(v: unknown): string {
-    if (v === null) return "null";
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (v === null) {
+      return 'null';
+    }
+    if (typeof v === 'string') {
+      return v;
+    }
+    if (typeof v === 'number' || typeof v === 'boolean') {
+      return String(v);
+    }
 
-    // objects/arrays -> short JSON (single-line)
     try {
       return JSON.stringify(v);
     } catch {
@@ -105,15 +114,33 @@ export class WorkflowRunsPage {
     }
   }
 
-  /** Split logs into lines for nicer rendering */
   logLines(logs: string | null | undefined): string[] {
-    if (!logs) return [];
+    if (!logs) {
+      return [];
+    }
     return logs.split(/\r?\n/);
   }
 
-  /** convenience badge text */
   statusText(step: RunStepRunDto): string {
-    return step.status ? "Succeeded" : "Failed";
+    return step.status ? 'Succeeded' : 'Failed';
+  }
+
+  getAvailableInputsForStep(run: StoredRun, index: number, stepId: number): Record<string, unknown> {
+    const vars: Record<string, unknown> = {};
+    Object.assign(vars, run.globalInputsSnapshot ?? {});
+
+    const steps = run.result.stepRuns ?? [];
+    for (let i = 0; i < index; i++) {
+      const out = steps[i]?.outputs?.variables ?? {};
+      Object.assign(vars, out);
+    }
+    const declared = run.declaredVarsByStepIdSnapshot?.[stepId] ?? [];
+    for (const k of declared) {
+      if (!(k in vars)) {
+        vars[k] = undefined;
+      }
+    }
+    return vars;
   }
 
   protected readonly navigator = navigator;

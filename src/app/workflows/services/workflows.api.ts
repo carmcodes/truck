@@ -1,9 +1,7 @@
-// src/app/workflows/services/workflows.api.ts
-
-import { Injectable } from "@angular/core";
-import { HttpClient } from "@angular/common/http";
-import { Observable } from "rxjs";
-import type {
+import {Injectable, inject} from '@angular/core';
+import {HttpClient} from '@angular/common/http';
+import {Observable} from 'rxjs';
+import {
   Id,
   WorkflowDto,
   CreateWorkflowRequest,
@@ -18,19 +16,14 @@ import type {
   UploadStepScriptRequest,
   UploadStepScriptResponse,
   UploadStepInputResponse,
-  GetWorkflowsResponse,
-  ExportTypeDto,
-} from "../models/workflow-models";
+  GetWorkflowsResponse, ExportTypeDto
+} from '../models/workflow-models';
 
-@Injectable({ providedIn: "root" })
+@Injectable({providedIn: 'root'})
 export class WorkflowApi {
+  private http = inject(HttpClient);
+
   private readonly baseUrl = "/api";
-
-  constructor(private http: HttpClient) {}
-
-  /* =======================
-     Workflow
-     ======================= */
 
   getWorkflows(): Observable<GetWorkflowsResponse> {
     return this.http.get<GetWorkflowsResponse>(`${this.baseUrl}/Workflow`);
@@ -46,7 +39,7 @@ export class WorkflowApi {
 
   deleteLastStep(workflowId: Id): Observable<DeleteLastStepResponse> {
     return this.http.delete<DeleteLastStepResponse>(
-      `${this.baseUrl}/Workflow/${workflowId}/Step`
+        `${this.baseUrl}/Workflow/${workflowId}/Step`
     );
   }
 
@@ -54,14 +47,9 @@ export class WorkflowApi {
     return this.http.put<RunWorkflowResponse>(`${this.baseUrl}/Workflow/run`, payload);
   }
 
-  /** ✅ NEW: export types */
   getExportTypes(): Observable<ExportTypeDto[]> {
     return this.http.get<ExportTypeDto[]>(`${this.baseUrl}/Workflow/export/types`);
   }
-
-  /* =======================
-     Step
-     ======================= */
 
   getSteps(workflowId: Id): Observable<GetStepsResponse> {
     return this.http.get<GetStepsResponse>(`${this.baseUrl}/Step/${workflowId}`);
@@ -75,15 +63,10 @@ export class WorkflowApi {
     return this.http.put<StepDto>(`${this.baseUrl}/Step`, payload);
   }
 
-  /** ✅ updated: includes includedOutputs */
   uploadStepScript(payload: UploadStepScriptRequest): Observable<UploadStepScriptResponse> {
     return this.http.put<UploadStepScriptResponse>(`${this.baseUrl}/Step/script`, payload);
   }
 
-  /**
-   * PUT /api/Step/input
-   * multipart/form-data: stepId + file
-   */
   uploadStepInput(stepId: Id, file: File): Observable<UploadStepInputResponse> {
     const form = new FormData();
     form.append("stepId", String(stepId));

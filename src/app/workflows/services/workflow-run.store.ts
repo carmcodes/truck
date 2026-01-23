@@ -1,11 +1,13 @@
-import type { Id, RunWorkflowResponse } from "../models/workflow-models";
+import type {Id, RunWorkflowResponse} from '../models/workflow-models';
 
 export interface StoredRun {
-  runId: string;       // client-generated
+  runId: string;
   workflowId: Id;
-  createdAt: string;   // ISO
+  createdAt: string;
   extension: string;
   result: RunWorkflowResponse;
+  globalInputsSnapshot?: Record<string, unknown>;
+  declaredVarsByStepIdSnapshot?: Record<string, string[]>;
 }
 
 function key(workflowId: Id) {
@@ -14,7 +16,9 @@ function key(workflowId: Id) {
 
 export function loadRuns(workflowId: Id): StoredRun[] {
   const raw = localStorage.getItem(key(workflowId));
-  if (!raw) return [];
+  if (!raw) {
+return [];
+}
   try {
     const list = JSON.parse(raw) as StoredRun[];
     return Array.isArray(list) ? list : [];
@@ -25,10 +29,11 @@ export function loadRuns(workflowId: Id): StoredRun[] {
 
 export function saveRun(workflowId: Id, run: StoredRun) {
   const prev = loadRuns(workflowId);
-  const next = [run, ...prev]; // newest first
+  const next = [run, ...prev];
   localStorage.setItem(key(workflowId), JSON.stringify(next));
 }
 
 export function clearRuns(workflowId: Id) {
   localStorage.removeItem(key(workflowId));
 }
+
