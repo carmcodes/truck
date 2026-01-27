@@ -213,50 +213,6 @@ export class WorkflowsFacade {
     return this.stepScriptSavedStatus()[stepId] ?? false;
   }
 
-  async loadWorkflow(workflowId: Id) {
-    this.loading.set(true);
-    this.error.set(null);
-
-    this.stepScriptByStepId.set({});
-    this.stepVarsByStepId.set({});
-    this.stepSyntaxErrors.set({});
-
-    try {
-      const listRes = await firstValueFrom(this.api.getWorkflows());
-      const item = listRes.workflows.find(w => w.id === workflowId);
-
-      if (!item) {
-        this.workflow.set(null);
-        this.stepsState.set([]);
-        this.selectedStepId.set(null);
-        this.inputsByStepId.set({});
-        this.includedOutputsByStepId.set({});
-        this.stepScriptSavedStatus.set({});
-        this.error.set("Workflow not found");
-        return;
-      }
-
-      this.workflow.set(this.mapListItemToWorkflowDto(item));
-
-      // Load all persisted data from localStorage
-      const storedInputs = this.loadInputsFromStorage(workflowId);
-      const storedIncludedOutputs = this.loadIncludedOutputsFromStorage(workflowId);
-      const storedScriptSavedStatus = this.loadScriptSavedStatusFromStorage(workflowId);
-
-      this.inputsByStepId.set(storedInputs);
-      this.includedOutputsByStepId.set(storedIncludedOutputs);
-      this.stepScriptSavedStatus.set(storedScriptSavedStatus);
-
-      console.log('📂 Loaded script saved status:', storedScriptSavedStatus);
-
-      await this.refreshSteps();
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to load workflow");
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
   initNewWorkflow() {
     const now = new Date().toISOString();
     this.workflow.set({
@@ -311,16 +267,6 @@ export class WorkflowsFacade {
     return this.stepScriptByStepId()[stepId] ?? "";
   }
 
-  onStepCodeChange(stepId: number, code: string) {
-    this.stepScriptByStepId.set({ ...this.stepScriptByStepId(), [stepId]: code });
-
-    const vars = extractVarsFromCode(code);
-    const map: Record<string, WorkflowVar> = {};
-    for (const v of vars) map[v.name] = { ...v, source: "step", stepId } as any;
-
-    this.stepVarsByStepId.set({ ...this.stepVarsByStepId(), [stepId]: map });
-  }
-
   patchWorkflow(patch: Partial<WorkflowDto>) {
     const wf = this.workflow();
     if (!wf) return;
@@ -331,75 +277,7 @@ export class WorkflowsFacade {
       updatedAt: new Date().toISOString(),
     });
   }
-
-  async saveWorkflow() {
-    const wf = this.workflow();
-    if (!wf) return;
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      // First, save the workflow metadata
-      if (!wf.id || wf.id === 0) {
-        const payload: CreateWorkflowRequest = {
-          name: wf.name,
-          description: wf.description,
-        };
-        const created = await firstValueFrom(this.api.createWorkflow(payload));
-        this.workflow.set(created);
-        this.stepsState.set([]);
-        this.selectedStepId.set(null);
-        return;
-      }
-
-      const payload: UpdateWorkflowRequest = {
-        id: wf.id,
-        name: wf.name,
-        description: wf.description,
-        version: wf.version,
-      };
-
-      const updated = await firstValueFrom(this.api.updateWorkflow(payload));
-      this.workflow.set(updated);
-
-      // ✅ Save all step scripts with their included outputs
-      console.log('💾 Saving all step scripts...');
-      const updatedStatus = { ...this.stepScriptSavedStatus() };
-
-      for (const step of this.stepsState()) {
-        const script = this.getStepScript(step.id);
-        const includedOutputs = this.getIncludedOutputs(step.id);
-
-        // Only save if there's a script
-        if (script && script.trim() !== '') {
-          console.log(`💾 Saving step ${step.id} (${step.alias}):`, {
-            scriptLength: script.length,
-            includedOutputs
-          });
-
-          await firstValueFrom(
-            this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
-          );
-
-          // Mark script as saved
-          updatedStatus[step.id] = true;
-        }
-      }
-
-      // ✅ Update and persist saved status for all steps
-      this.stepScriptSavedStatus.set(updatedStatus);
-      this.saveScriptSavedStatusToStorage(wf.id, updatedStatus);
-
-      console.log('✅ Workflow and all scripts saved successfully');
-
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to save workflow");
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
+  
   selectStep(stepId: Id) {
     this.selectedStepId.set(stepId);
   }
@@ -475,43 +353,6 @@ export class WorkflowsFacade {
       this.stepsState.set(this.stepsState().map(s => (s.id === stepId ? updated : s)));
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to update step");
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-  async deleteLastStep() {
-    const wf = this.workflow();
-    if (!wf?.id) return;
-    if (this.stepsState().length === 0) return;
-
-    const lastStep = this.stepsState()[this.stepsState().length - 1];
-
-    this.saving.set(true);
-    this.error.set(null);
-
-    try {
-      await firstValueFrom(this.api.deleteLastStep(wf.id));
-
-      // Clean up localStorage for deleted step
-      const newInputs = { ...this.inputsByStepId() };
-      delete newInputs[lastStep.id];
-      this.inputsByStepId.set(newInputs);
-      this.saveInputsToStorage(wf.id, newInputs);
-
-      const newIncludedOutputs = { ...this.includedOutputsByStepId() };
-      delete newIncludedOutputs[lastStep.id];
-      this.includedOutputsByStepId.set(newIncludedOutputs);
-      this.saveIncludedOutputsToStorage(wf.id, newIncludedOutputs);
-
-      const newScriptSavedStatus = { ...this.stepScriptSavedStatus() };
-      delete newScriptSavedStatus[lastStep.id];
-      this.stepScriptSavedStatus.set(newScriptSavedStatus);
-      this.saveScriptSavedStatusToStorage(wf.id, newScriptSavedStatus);
-
-      await this.refreshSteps();
-    } catch (e: any) {
-      this.error.set(e?.message ?? "Failed to delete last step");
     } finally {
       this.saving.set(false);
     }
@@ -694,6 +535,212 @@ export class WorkflowsFacade {
       this.error.set(e?.message ?? "Failed to run workflow");
     } finally {
       this.running.set(false);
+    }
+  }
+
+  // Add localStorage methods for scripts
+  private getScriptsStorageKey(workflowId: number): string {
+    return `workflow_${workflowId}_scripts`;
+  }
+
+  private loadScriptsFromStorage(workflowId: number): Record<number, string> {
+    try {
+      const key = this.getScriptsStorageKey(workflowId);
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      console.warn('Failed to load scripts from storage', e);
+      return {};
+    }
+  }
+
+  private saveScriptsToStorage(workflowId: number, scripts: Record<number, string>) {
+    try {
+      const key = this.getScriptsStorageKey(workflowId);
+      localStorage.setItem(key, JSON.stringify(scripts));
+    } catch (e) {
+      console.warn('Failed to save scripts to storage', e);
+    }
+  }
+
+// Update loadWorkflow to load scripts
+  async loadWorkflow(workflowId: Id) {
+    this.loading.set(true);
+    this.error.set(null);
+
+    this.stepVarsByStepId.set({});
+    this.stepSyntaxErrors.set({});
+
+    try {
+      const listRes = await firstValueFrom(this.api.getWorkflows());
+      const item = listRes.workflows.find(w => w.id === workflowId);
+
+      if (!item) {
+        this.workflow.set(null);
+        this.stepsState.set([]);
+        this.selectedStepId.set(null);
+        this.inputsByStepId.set({});
+        this.includedOutputsByStepId.set({});
+        this.stepScriptSavedStatus.set({});
+        this.stepScriptByStepId.set({});
+        this.error.set("Workflow not found");
+        return;
+      }
+
+      this.workflow.set(this.mapListItemToWorkflowDto(item));
+
+      // Load all persisted data from localStorage
+      const storedInputs = this.loadInputsFromStorage(workflowId);
+      const storedIncludedOutputs = this.loadIncludedOutputsFromStorage(workflowId);
+      const storedScriptSavedStatus = this.loadScriptSavedStatusFromStorage(workflowId);
+      const storedScripts = this.loadScriptsFromStorage(workflowId); // ✅ Load scripts
+
+      this.inputsByStepId.set(storedInputs);
+      this.includedOutputsByStepId.set(storedIncludedOutputs);
+      this.stepScriptSavedStatus.set(storedScriptSavedStatus);
+      this.stepScriptByStepId.set(storedScripts); // ✅ Set scripts
+
+      console.log('📂 Loaded scripts:', storedScripts);
+      console.log('📂 Loaded script saved status:', storedScriptSavedStatus);
+
+      await this.refreshSteps();
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to load workflow");
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+// Update onStepCodeChange to persist scripts
+  onStepCodeChange(stepId: number, code: string) {
+    const wf = this.workflow();
+    if (!wf?.id) return;
+
+    const newScripts = { ...this.stepScriptByStepId(), [stepId]: code };
+    this.stepScriptByStepId.set(newScripts);
+
+    // ✅ Save scripts to localStorage
+    this.saveScriptsToStorage(wf.id, newScripts);
+
+    const vars = extractVarsFromCode(code);
+    const map: Record<string, WorkflowVar> = {};
+    for (const v of vars) map[v.name] = { ...v, source: "step", stepId } as any;
+
+    this.stepVarsByStepId.set({ ...this.stepVarsByStepId(), [stepId]: map });
+  }
+
+// Update deleteLastStep to clean up scripts
+  async deleteLastStep() {
+    const wf = this.workflow();
+    if (!wf?.id) return;
+    if (this.stepsState().length === 0) return;
+
+    const lastStep = this.stepsState()[this.stepsState().length - 1];
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      await firstValueFrom(this.api.deleteLastStep(wf.id));
+
+      // Clean up localStorage for deleted step
+      const newInputs = { ...this.inputsByStepId() };
+      delete newInputs[lastStep.id];
+      this.inputsByStepId.set(newInputs);
+      this.saveInputsToStorage(wf.id, newInputs);
+
+      const newIncludedOutputs = { ...this.includedOutputsByStepId() };
+      delete newIncludedOutputs[lastStep.id];
+      this.includedOutputsByStepId.set(newIncludedOutputs);
+      this.saveIncludedOutputsToStorage(wf.id, newIncludedOutputs);
+
+      const newScriptSavedStatus = { ...this.stepScriptSavedStatus() };
+      delete newScriptSavedStatus[lastStep.id];
+      this.stepScriptSavedStatus.set(newScriptSavedStatus);
+      this.saveScriptSavedStatusToStorage(wf.id, newScriptSavedStatus);
+
+      // ✅ Clean up scripts
+      const newScripts = { ...this.stepScriptByStepId() };
+      delete newScripts[lastStep.id];
+      this.stepScriptByStepId.set(newScripts);
+      this.saveScriptsToStorage(wf.id, newScripts);
+
+      await this.refreshSteps();
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to delete last step");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async saveWorkflow() {
+    const wf = this.workflow();
+    if (!wf) return;
+
+    this.saving.set(true);
+    this.error.set(null);
+
+    try {
+      // First, save the workflow metadata
+      if (!wf.id || wf.id === 0) {
+        const payload: CreateWorkflowRequest = {
+          name: wf.name,
+          description: wf.description,
+        };
+        const created = await firstValueFrom(this.api.createWorkflow(payload));
+        this.workflow.set(created);
+        this.stepsState.set([]);
+        this.selectedStepId.set(null);
+        return;
+      }
+
+      const payload: UpdateWorkflowRequest = {
+        id: wf.id,
+        name: wf.name,
+        description: wf.description,
+        version: wf.version,
+      };
+
+      const updated = await firstValueFrom(this.api.updateWorkflow(payload));
+      this.workflow.set(updated);
+
+      // Save all step scripts with their included outputs
+      console.log('💾 Saving all step scripts...');
+      const updatedStatus = { ...this.stepScriptSavedStatus() };
+
+      for (const step of this.stepsState()) {
+        const script = this.getStepScript(step.id);
+        const includedOutputs = this.getIncludedOutputs(step.id);
+
+        // Only save if there's a script
+        if (script && script.trim() !== '') {
+          console.log(`💾 Saving step ${step.id} (${step.alias}):`, {
+            scriptLength: script.length,
+            includedOutputs
+          });
+
+          await firstValueFrom(
+            this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+          );
+
+          // Mark script as saved
+          updatedStatus[step.id] = true;
+        }
+      }
+
+      // Update and persist saved status for all steps
+      this.stepScriptSavedStatus.set(updatedStatus);
+      this.saveScriptSavedStatusToStorage(wf.id, updatedStatus);
+
+      // ✅ Refresh steps to get updated state from backend
+      await this.refreshSteps();
+
+      console.log('✅ Workflow and all scripts saved successfully');
+
+    } catch (e: any) {
+      this.error.set(e?.message ?? "Failed to save workflow");
+    } finally {
+      this.saving.set(false);
     }
   }
 }

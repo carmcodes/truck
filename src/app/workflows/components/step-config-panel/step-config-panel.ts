@@ -1,4 +1,4 @@
-import {Component, EventEmitter, Input, Output, signal, OnChanges, SimpleChanges} from "@angular/core";
+import {Component, EventEmitter, Input, Output, signal, OnChanges, SimpleChanges, OnDestroy} from "@angular/core";
 import type { StepDto, Id } from "../../models/workflow-models";
 import {WorkflowVar} from "../monaco-step-editor/workflow-vars";
 import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
@@ -70,13 +70,10 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
               <input
                 type="checkbox"
                 [checked]="step.cacheable"
+                [disabled]="isUpdating()"
                 (change)="handleCacheableChange($any($event.target).checked)"
               />
             </ds-form-field>
-            <!-- DEBUG INFO -->
-            <div style="font-size:10px; opacity:0.5; margin-top:4px;">
-              DEBUG: step.cacheable={{ step.cacheable }} | last={{ lastSentCacheable() }}
-            </div>
           </div>
 
           <div>
@@ -93,7 +90,7 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
     </div>
   `,
 })
-export class StepConfigPanelComponent implements OnChanges {
+export class StepConfigPanelComponent implements OnChanges, OnDestroy {
   @Input() step: StepDto | null = null;
   @Input() steps: StepDto[] = [];
   @Input() stepIndex : number = 0;
@@ -103,40 +100,33 @@ export class StepConfigPanelComponent implements OnChanges {
   currentAliasValue = signal<string>('');
   lastValidAlias = signal<string>('');
 
-  // Track the last value we actually sent to the backend
-  lastSentCacheable = signal<boolean | null>(null);
+  isUpdating = signal<boolean>(false);
+  private updateTimer: any;
   private currentStepId: number | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['step']) {
-      console.log('🔄 Step input changed:', {
-        previousStep: changes['step'].previousValue?.id,
-        currentStep: this.step?.id,
-        cacheable: this.step?.cacheable
-      });
-
       if (this.step) {
         const alias = this.step.alias || '';
         this.currentAliasValue.set(alias);
         this.lastValidAlias.set(alias);
         this.aliasError.set(alias.includes(' '));
 
-        // ✅ When step changes (including after backend update), sync the last sent value
-        // Reset if we switched to a different step
+        // Reset updating flag when step changes
         if (this.currentStepId !== this.step.id) {
-          console.log('📝 New step selected, resetting lastSentCacheable');
           this.currentStepId = this.step.id;
-          this.lastSentCacheable.set(this.step.cacheable);
-        } else {
-          // Same step, but it updated from backend - sync to the new value
-          console.log('🔄 Same step updated from backend, syncing lastSentCacheable');
-          this.lastSentCacheable.set(this.step.cacheable);
+          this.isUpdating.set(false);
+          clearTimeout(this.updateTimer);
         }
       } else {
         this.currentStepId = null;
-        this.lastSentCacheable.set(null);
+        this.isUpdating.set(false);
       }
     }
+  }
+
+  ngOnDestroy() {
+    clearTimeout(this.updateTimer);
   }
 
   handleAliasInput(value: string) {
@@ -156,24 +146,32 @@ export class StepConfigPanelComponent implements OnChanges {
   }
 
   handleCacheableChange(checked: boolean) {
-    if (!this.step) return;
+    if (!this.step || this.isUpdating()) return;
 
-    console.log('🔘 Cacheable change triggered:', {
-      clicked: checked,
+    console.log('🔘 Cacheable change:', {
+      checked,
       stepCacheable: this.step.cacheable,
-      lastSent: this.lastSentCacheable(),
-      willEmit: checked !== this.lastSentCacheable()
+      isUpdating: this.isUpdating()
     });
 
-    // Only emit if different from the last value we sent
-    if (checked === this.lastSentCacheable()) {
-      console.log('⏭️ Skipping - same as last sent value');
-      return;
-    }
+    // Prevent rapid clicks
+    this.isUpdating.set(true);
 
-    console.log('✅ Emitting cacheable patch:', checked);
-    this.lastSentCacheable.set(checked);
-    this.emitPatch({ cacheable: checked });
+    // Clear any pending update
+    clearTimeout(this.updateTimer);
+
+    // Debounce the update
+    this.updateTimer = setTimeout(() => {
+      if (this.step && checked !== this.step.cacheable) {
+        console.log('✅ Emitting cacheable patch:', checked);
+        this.emitPatch({ cacheable: checked });
+      }
+
+      // Re-enable after a delay to allow backend to respond
+      setTimeout(() => {
+        this.isUpdating.set(false);
+      }, 500);
+    }, 100);
   }
 
   emitPatch(patch: Partial<StepDto>) {
