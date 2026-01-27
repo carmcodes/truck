@@ -35,7 +35,6 @@ export class WorkflowsFacade {
 
   readonly stepVarsByStepId = signal<Record<number, Record<string, WorkflowVar>>>({});
 
-  // ✅ Changed from globalInputs to inputsByStepId for per-step scoping
   readonly inputsByStepId = signal<Record<number, Record<string, unknown>>>({});
 
   readonly stepSyntaxErrors = signal<Record<number, string[]>>({});
@@ -51,12 +50,37 @@ export class WorkflowsFacade {
     return id == null ? null : this.stepsState().find(s => s.id === id) ?? null;
   });
 
-  // ✅ Helper method to get step index
+  // ✅ localStorage key for inputs
+  private getInputsStorageKey(workflowId: number): string {
+    return `workflow_${workflowId}_inputs`;
+  }
+
+  // ✅ Load inputs from localStorage
+  private loadInputsFromStorage(workflowId: number): Record<number, Record<string, unknown>> {
+    try {
+      const key = this.getInputsStorageKey(workflowId);
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      console.warn('Failed to load inputs from storage', e);
+      return {};
+    }
+  }
+
+  // ✅ Save inputs to localStorage
+  private saveInputsToStorage(workflowId: number, inputs: Record<number, Record<string, unknown>>) {
+    try {
+      const key = this.getInputsStorageKey(workflowId);
+      localStorage.setItem(key, JSON.stringify(inputs));
+    } catch (e) {
+      console.warn('Failed to save inputs to storage', e);
+    }
+  }
+
   private getStepIndexById(stepId: number): number {
     return this.stepsState().findIndex(s => s.id === stepId);
   }
 
-  // ✅ Get inputs visible at a specific step (current step and all previous steps)
   getInputsVisibleAtStep(stepId: number): Record<string, unknown> {
     const idx = this.getStepIndexById(stepId);
     if (idx < 0) return {};
@@ -65,7 +89,6 @@ export class WorkflowsFacade {
     const byStep = this.inputsByStepId();
 
     const merged: Record<string, unknown> = {};
-    // Merge inputs from step 0 up to and including current step
     for (let i = 0; i <= idx; i++) {
       const sid = steps[i]?.id;
       if (!sid) continue;
@@ -84,7 +107,6 @@ export class WorkflowsFacade {
 
     const out: WorkflowVar[] = [];
 
-    // ✅ Add inputs with proper namespacing: Inputs.{stepAlias}.{varName}
     const byStep = this.inputsByStepId();
     for (let i = 0; i <= idx; i++) {
       const step = steps[i];
@@ -100,7 +122,6 @@ export class WorkflowsFacade {
       }
     }
 
-    // Variables from previous and current steps
     const varsByStep = this.stepVarsByStepId();
     for (let i = 0; i <= idx; i++) {
       const sid = steps[i].id;
@@ -113,6 +134,7 @@ export class WorkflowsFacade {
     for (const v of out) uniq.set(v.name, v);
     return [...uniq.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
+
   readonly lastRun = signal<RunWorkflowResponse | null>(null);
   readonly lastRunExtension = signal<string>("");
 
@@ -137,12 +159,10 @@ export class WorkflowsFacade {
     this.loading.set(true);
     this.error.set(null);
 
-    // ✅ Clear all state when loading a workflow
     this.stepScriptByStepId.set({});
     this.stepVarsByStepId.set({});
     this.stepSyntaxErrors.set({});
     this.includedOutputsByStepId.set({});
-    this.inputsByStepId.set({}); // ✅ Clear per-step inputs
 
     try {
       const listRes = await firstValueFrom(this.api.getWorkflows());
@@ -152,11 +172,17 @@ export class WorkflowsFacade {
         this.workflow.set(null);
         this.stepsState.set([]);
         this.selectedStepId.set(null);
+        this.inputsByStepId.set({});
         this.error.set("Workflow not found");
         return;
       }
 
       this.workflow.set(this.mapListItemToWorkflowDto(item));
+
+      // ✅ Load inputs from localStorage before refreshing steps
+      const storedInputs = this.loadInputsFromStorage(workflowId);
+      this.inputsByStepId.set(storedInputs);
+
       await this.refreshSteps();
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to load workflow");
@@ -179,12 +205,11 @@ export class WorkflowsFacade {
     this.selectedStepId.set(null);
     this.error.set(null);
 
-    // ✅ Clear all step-related state
     this.stepScriptByStepId.set({});
     this.stepVarsByStepId.set({});
     this.stepSyntaxErrors.set({});
     this.includedOutputsByStepId.set({});
-    this.inputsByStepId.set({}); // ✅ Clear per-step inputs
+    this.inputsByStepId.set({});
   }
 
   private mapListItemToWorkflowDto(item: WorkflowListItemDto): WorkflowDto {
@@ -283,6 +308,10 @@ export class WorkflowsFacade {
   getStepDisplayIndex(stepId: Id): number {
     const index = this.stepsState().findIndex(step => step.id === stepId);
     return index >= 0 ? index + 1 : 0;
+  }
+
+  getStepInputs(stepId: number): Record<string, unknown> {
+    return this.inputsByStepId()[stepId] ?? {};
   }
 
   async addStep(script: string = "") {
@@ -399,7 +428,8 @@ export class WorkflowsFacade {
 
   async uploadSelectedStepInput(file: File) {
     const step = this.selectedStep();
-    if (!step) return;
+    const wf = this.workflow();
+    if (!step || !wf?.id) return;
 
     this.saving.set(true);
     this.error.set(null);
@@ -407,10 +437,12 @@ export class WorkflowsFacade {
     try {
       const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
 
-      // ✅ Store inputs under THIS specific step only
       const next = { ...this.inputsByStepId() };
       next[step.id] = { ...(next[step.id] ?? {}), ...(res.inputs ?? {}) };
       this.inputsByStepId.set(next);
+
+      // ✅ Save to localStorage after successful upload
+      this.saveInputsToStorage(wf.id, next);
 
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to upload input");
@@ -427,7 +459,6 @@ export class WorkflowsFacade {
       this.exportTypes.set([]);
     }
   }
-
 
   async runWorkflow(extension: string) {
     const wf = this.workflow();
@@ -458,5 +489,4 @@ export class WorkflowsFacade {
       this.running.set(false);
     }
   }
-
 }
