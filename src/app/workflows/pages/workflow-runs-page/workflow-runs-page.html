@@ -80,7 +80,7 @@
           </div>
 
           @if (expandedStepId() === step.stepId) {
-            @let inVars = toVarRows(getAvailableInputsForStep(run, i, step.stepId));
+            @let inVars = toVarRows(getInputVarsForStep(run, i, step.stepId));
             @let outVars = toVarRows(getOutputVars(step));
             @let lines = logLines(step.logs);
 

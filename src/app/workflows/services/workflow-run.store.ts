@@ -6,9 +6,8 @@ export interface StoredRun {
   createdAt: string;
   extension: string;
   result: RunWorkflowResponse;
-  globalInputsSnapshot?: Record<string, unknown>;
-  declaredVarsByStepIdSnapshot?: Record<string, string[]>;
-  includedOutputsSnapshot?: Record<number, string[]>; // ✅ Add this line
+  includedOutputsSnapshot?: Record<number, string[]>; // stepId -> array of output variable names
+  inputsByStepId?: Record<number, Record<string, unknown>>; // ✅ Add this - stepId -> file inputs
 }
 
 function key(workflowId: Id) {

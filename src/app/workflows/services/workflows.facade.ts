@@ -520,6 +520,10 @@ export class WorkflowsFacade {
       console.log('📸 Included outputs snapshot:', includedOutputsSnapshot);
       console.log('📊 Run result:', res);
 
+      // ✅ Also capture the inputs snapshot (file inputs)
+      const inputsByStepId = { ...this.inputsByStepId() };
+      console.log('📥 Inputs by step ID:', inputsByStepId);
+
       saveRun(wf.id, {
         runId: crypto.randomUUID(),
         workflowId: wf.id,
@@ -527,6 +531,7 @@ export class WorkflowsFacade {
         extension,
         result: res,
         includedOutputsSnapshot,
+        inputsByStepId, // ✅ Save file inputs
       });
 
       console.log('✅ Run saved successfully');
@@ -537,7 +542,6 @@ export class WorkflowsFacade {
       this.running.set(false);
     }
   }
-
   // Add localStorage methods for scripts
   private getScriptsStorageKey(workflowId: number): string {
     return `workflow_${workflowId}_scripts`;
