@@ -69,7 +69,7 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
               <label ds-label style="font-size:12px; font-weight:600;">Cacheable</label>
               <input
                 type="checkbox"
-                [checked]="currentCacheableValue()"
+                [checked]="step.cacheable"
                 (change)="handleCacheableChange($any($event.target).checked)"
               />
             </ds-form-field>
@@ -99,7 +99,6 @@ export class StepConfigPanelComponent implements OnChanges {
   currentAliasValue = signal<string>('');
   lastValidAlias = signal<string>('');
 
-  currentCacheableValue = signal<boolean>(false);
   lastCacheableValue = signal<boolean>(false);
 
   ngOnChanges(changes: SimpleChanges) {
@@ -110,9 +109,9 @@ export class StepConfigPanelComponent implements OnChanges {
       this.lastValidAlias.set(alias);
       this.aliasError.set(alias.includes(' '));
 
-      // Sync cacheable value
-      this.currentCacheableValue.set(this.step.cacheable);
+      // ✅ Sync cacheable value from the step input
       this.lastCacheableValue.set(this.step.cacheable);
+      console.log('🔄 Step changed, cacheable synced to:', this.step.cacheable);
     }
   }
 
@@ -138,18 +137,25 @@ export class StepConfigPanelComponent implements OnChanges {
   }
 
   handleCacheableChange(checked: boolean) {
-    // Update the displayed value immediately
-    this.currentCacheableValue.set(checked);
+    console.log('🔘 Cacheable toggle:', {
+      newValue: checked,
+      lastValue: this.lastCacheableValue(),
+      stepCacheable: this.step?.cacheable
+    });
 
-    // Only emit if the value has actually changed from the last value
-    if (checked !== this.lastCacheableValue()) {
+    // Only emit if the value has actually changed from the step's current value
+    if (this.step && checked !== this.step.cacheable) {
+      console.log('✅ Emitting cacheable patch:', checked);
       this.lastCacheableValue.set(checked);
       this.emitPatch({ cacheable: checked });
+    } else {
+      console.log('⏭️ Skipping cacheable patch - no change');
     }
   }
 
   emitPatch(patch: Partial<StepDto>) {
     if (!this.step) return;
+    console.log('📤 Emitting patch:', patch);
     this.patchStep.emit({ stepId: this.step.id, patch });
   }
 }
