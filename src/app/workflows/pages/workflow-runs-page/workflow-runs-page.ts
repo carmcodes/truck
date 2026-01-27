@@ -58,10 +58,28 @@ export class WorkflowRunsPage implements OnInit {
     return s.status ? 'Succeeded' : 'Failed';
   }
 
+  // ✅ Updated to filter by included outputs
   getOutputVars(step: RunStepRunDto): Record<string, unknown> {
-    return step.outputs?.variables ?? {};
-  }
+    const run = this.selectedRun();
+    if (!run) return {};
 
+    const allOutputs = step.outputs?.variables ?? {};
+    const includedOutputs = run.includedOutputsSnapshot?.[step.stepId];
+
+    // If no included outputs snapshot, show all outputs (backward compatibility)
+    if (!includedOutputs || includedOutputs.length === 0) {
+      return allOutputs;
+    }
+
+    // Filter to only show included outputs
+    const filtered: Record<string, unknown> = {};
+    for (const key of includedOutputs) {
+      if (key in allOutputs) {
+        filtered[key] = allOutputs[key];
+      }
+    }
+    return filtered;
+  }
   getInputVarsForStep(runSteps: RunStepRunDto[], index: number): Record<string, unknown> {
     const vars: Record<string, unknown> = {};
     for (let i = 0; i < index; i++) {

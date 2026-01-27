@@ -8,6 +8,7 @@ export interface StoredRun {
   result: RunWorkflowResponse;
   globalInputsSnapshot?: Record<string, unknown>;
   declaredVarsByStepIdSnapshot?: Record<string, string[]>;
+  includedOutputsSnapshot?: Record<number, string[]>; // ✅ Add this line
 }
 
 function key(workflowId: Id) {
@@ -17,8 +18,8 @@ function key(workflowId: Id) {
 export function loadRuns(workflowId: Id): StoredRun[] {
   const raw = localStorage.getItem(key(workflowId));
   if (!raw) {
-return [];
-}
+    return [];
+  }
   try {
     const list = JSON.parse(raw) as StoredRun[];
     return Array.isArray(list) ? list : [];
@@ -36,4 +37,3 @@ export function saveRun(workflowId: Id, run: StoredRun) {
 export function clearRuns(workflowId: Id) {
   localStorage.removeItem(key(workflowId));
 }
-

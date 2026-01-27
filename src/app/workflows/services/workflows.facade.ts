@@ -139,7 +139,7 @@ export class WorkflowsFacade {
   readonly lastRunExtension = signal<string>("");
 
   setStepSyntaxErrors(stepId: number, errors: string[]) {
-    this.stepSyntaxErrors.update(m => ({ ...m, [stepId]: errors }));
+    this.stepSyntaxErrors.update(m => ({...m, [stepId]: errors}));
   }
 
   hasAnySyntaxErrors(): boolean {
@@ -245,13 +245,13 @@ export class WorkflowsFacade {
   }
 
   onStepCodeChange(stepId: number, code: string) {
-    this.stepScriptByStepId.set({ ...this.stepScriptByStepId(), [stepId]: code });
+    this.stepScriptByStepId.set({...this.stepScriptByStepId(), [stepId]: code});
 
     const vars = extractVarsFromCode(code);
     const map: Record<string, WorkflowVar> = {};
-    for (const v of vars) map[v.name] = { ...v, source: "step", stepId } as any;
+    for (const v of vars) map[v.name] = {...v, source: "step", stepId} as any;
 
-    this.stepVarsByStepId.set({ ...this.stepVarsByStepId(), [stepId]: map });
+    this.stepVarsByStepId.set({...this.stepVarsByStepId(), [stepId]: map});
   }
 
   patchWorkflow(patch: Partial<WorkflowDto>) {
@@ -342,7 +342,7 @@ export class WorkflowsFacade {
       this.stepsState.set([...this.stepsState(), created]);
       this.selectedStepId.set(created.id);
 
-      this.stepScriptByStepId.set({ ...this.stepScriptByStepId(), [created.id]: script });
+      this.stepScriptByStepId.set({...this.stepScriptByStepId(), [created.id]: script});
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to add step");
     } finally {
@@ -416,7 +416,7 @@ export class WorkflowsFacade {
 
     try {
       await firstValueFrom(
-        this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+        this.api.uploadStepScript({stepId: step.id, script, includedOutputs})
       );
       await this.refreshSteps();
     } catch (e: any) {
@@ -437,8 +437,8 @@ export class WorkflowsFacade {
     try {
       const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
 
-      const next = { ...this.inputsByStepId() };
-      next[step.id] = { ...(next[step.id] ?? {}), ...(res.inputs ?? {}) };
+      const next = {...this.inputsByStepId()};
+      next[step.id] = {...(next[step.id] ?? {}), ...(res.inputs ?? {})};
       this.inputsByStepId.set(next);
 
       // ✅ Save to localStorage after successful upload
@@ -472,9 +472,15 @@ export class WorkflowsFacade {
     this.error.set(null);
 
     try {
-      const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
+      const res = await firstValueFrom(this.api.runWorkflow({workflowId: wf.id, extension}));
       this.lastRun.set(res);
       this.lastRunExtension.set(extension);
+
+      // ✅ Capture the included outputs snapshot at run time
+      const includedOutputsSnapshot: Record<number, string[]> = {};
+      for (const step of this.stepsState()) {
+        includedOutputsSnapshot[step.id] = this.getIncludedOutputs(step.id);
+      }
 
       saveRun(wf.id, {
         runId: crypto.randomUUID(),
@@ -482,6 +488,7 @@ export class WorkflowsFacade {
         createdAt: new Date().toISOString(),
         extension,
         result: res,
+        includedOutputsSnapshot, // ✅ Save which outputs were selected
       });
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to run workflow");
