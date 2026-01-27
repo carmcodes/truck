@@ -84,10 +84,20 @@ export class WorkflowsFacade {
 
     const out: WorkflowVar[] = [];
 
-    // ✅ Only get inputs visible at THIS step (current + previous steps)
-    const visibleInputs = this.getInputsVisibleAtStep(selectedId);
-    for (const k of Object.keys(visibleInputs ?? {})) {
-      out.push({ name: k, kind: "unknown", source: "input" } as any);
+    // ✅ Add inputs with proper namespacing: Inputs.{stepAlias}.{varName}
+    const byStep = this.inputsByStepId();
+    for (let i = 0; i <= idx; i++) {
+      const step = steps[i];
+      const stepInputs = byStep[step.id] ?? {};
+      const stepAlias = step.alias || `step${i + 1}`;
+
+      for (const varName of Object.keys(stepInputs)) {
+        out.push({
+          name: `Inputs.${stepAlias}.${varName}`,
+          kind: "unknown",
+          source: "input"
+        } as any);
+      }
     }
 
     // Variables from previous and current steps
@@ -103,7 +113,6 @@ export class WorkflowsFacade {
     for (const v of out) uniq.set(v.name, v);
     return [...uniq.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
-
   readonly lastRun = signal<RunWorkflowResponse | null>(null);
   readonly lastRunExtension = signal<string>("");
 
