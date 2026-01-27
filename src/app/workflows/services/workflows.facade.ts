@@ -436,7 +436,6 @@ export class WorkflowsFacade {
 
     console.log(`✅ Included outputs for step ${stepId}:`, outputs); // DEBUG
   }
-
   getIncludedOutputs(stepId: number): string[] {
     return this.includedOutputsByStepId()[stepId] ?? [];
   }
@@ -495,6 +494,20 @@ export class WorkflowsFacade {
       this.exportTypes.set([]);
     }
   }
+  // Add this method to WorkflowsFacade
+  clearStepInputs(stepId: number) {
+    const wf = this.workflow();
+    if (!wf?.id) return;
+
+    const next = { ...this.inputsByStepId() };
+    delete next[stepId]; // Remove the inputs for this step
+    this.inputsByStepId.set(next);
+
+    // Save to localStorage
+    this.saveInputsToStorage(wf.id, next);
+
+    console.log(`🗑️ Cleared inputs for step ${stepId}`); // DEBUG
+  }
 
   async runWorkflow(extension: string) {
     const wf = this.workflow();
@@ -508,19 +521,38 @@ export class WorkflowsFacade {
     this.error.set(null);
 
     try {
+      // ✅ CRITICAL: Save all step scripts with their included outputs BEFORE running
+      console.log('💾 Saving all scripts before running...'); // DEBUG
+      for (const step of this.stepsState()) {
+        const script = this.getStepScript(step.id);
+        const includedOutputs = this.getIncludedOutputs(step.id);
+
+        console.log(`💾 Step ${step.id} (${step.alias}):`, {
+          scriptLength: script.length,
+          includedOutputs
+        }); // DEBUG
+
+        if (script) { // Only save if there's a script
+          await firstValueFrom(
+            this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+          );
+        }
+      }
+
+      console.log('▶️ Running workflow...'); // DEBUG
       const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
       this.lastRun.set(res);
       this.lastRunExtension.set(extension);
 
-      // ✅ Capture the included outputs snapshot at run time
+      // Capture the included outputs snapshot at run time
       const includedOutputsSnapshot: Record<number, string[]> = {};
       for (const step of this.stepsState()) {
         const outputs = this.getIncludedOutputs(step.id);
         includedOutputsSnapshot[step.id] = outputs;
-        console.log(`📸 Step ${step.id} (${step.alias}) included outputs:`, outputs); // DEBUG
       }
 
-      console.log('📸 Full includedOutputsSnapshot:', includedOutputsSnapshot); // DEBUG
+      console.log('📸 Included outputs snapshot:', includedOutputsSnapshot); // DEBUG
+      console.log('📊 Run result:', res); // DEBUG
 
       saveRun(wf.id, {
         runId: crypto.randomUUID(),
@@ -531,11 +563,13 @@ export class WorkflowsFacade {
         includedOutputsSnapshot,
       });
 
-      console.log('✅ Run saved with included outputs snapshot'); // DEBUG
+      console.log('✅ Run saved successfully'); // DEBUG
     } catch (e: any) {
+      console.error('❌ Run failed:', e); // DEBUG
       this.error.set(e?.message ?? "Failed to run workflow");
     } finally {
       this.running.set(false);
     }
   }
+
 }

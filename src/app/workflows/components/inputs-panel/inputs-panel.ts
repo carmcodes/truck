@@ -14,6 +14,24 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
                       Upload JSON to make variables available to the workflow
                   </div>
               </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input
+                type="file"
+                #fileInput
+                accept="application/json,.json,.txt"
+                [disabled]="!stepId"
+                (change)="onFilePicked($event)"
+              />
+              @if (stepInputs && objectKeys(stepInputs).length > 0) {
+                <button
+                  type="button"
+                  style="font-size:12px; color: #b00020;"
+                  (click)="clearInputs.emit()"
+                >
+                  Clear Inputs
+                </button>
+              }
+            </div>
 
               <div style="display:flex; gap:8px; align-items:center;">
                   <input
@@ -76,6 +94,8 @@ export class InputsPanelComponent {
 
   @Output() uploadInput = new EventEmitter<File>();
 
+  @Output() clearInputs = new EventEmitter<void>();
+  @Input() stepInputs!: Record<string, unknown>;
   onFilePicked(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];

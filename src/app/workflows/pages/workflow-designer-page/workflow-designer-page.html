@@ -213,12 +213,13 @@
 
         <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
 
-            <app-inputs-panel
-                    [stepId]="facade.selectedStep()?.id ?? null"
-                    [stepAlias]="facade.selectedStep()?.alias ?? null"
-                    [globalInputs]="facade.selectedStep() ? facade.getInputsVisibleAtStep(facade.selectedStep()!.id) : {}"
-                    (uploadInput)="facade.uploadSelectedStepInput($event)"
-            ></app-inputs-panel>
+          <app-inputs-panel
+            [stepId]="facade.selectedStep()?.id ?? null"
+            [stepAlias]="facade.selectedStep()?.alias ?? null"
+            [stepInputs]="facade.selectedStep() ? facade.getStepInputs(facade.selectedStep()!.id) : {}"
+            (uploadInput)="facade.uploadSelectedStepInput($event)"
+            (clearInputs)="facade.selectedStep() && facade.clearStepInputs(facade.selectedStep()!.id)"
+          ></app-inputs-panel>
 
             <app-variables-panel
                     [step]="facade.selectedStep()"
