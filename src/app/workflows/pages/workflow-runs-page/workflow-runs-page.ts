@@ -61,14 +61,31 @@ export class WorkflowRunsPage implements OnInit {
   // ✅ Updated to filter by included outputs
   getOutputVars(step: RunStepRunDto): Record<string, unknown> {
     const run = this.selectedRun();
-    if (!run) return {};
+    console.log('🔍 getOutputVars called for step:', step.stepId); // DEBUG
+    console.log('🔍 Selected run:', run); // DEBUG
+
+    if (!run) {
+      console.log('❌ No run selected'); // DEBUG
+      return {};
+    }
 
     const allOutputs = step.outputs?.variables ?? {};
-    const includedOutputs = run.includedOutputsSnapshot?.[step.stepId];
+    console.log('🔍 All outputs from step:', allOutputs); // DEBUG
 
-    // If no included outputs snapshot, show all outputs (backward compatibility)
-    if (!includedOutputs || includedOutputs.length === 0) {
+    const includedOutputs = run.includedOutputsSnapshot?.[step.stepId];
+    console.log('🔍 Included outputs from snapshot for step', step.stepId, ':', includedOutputs); // DEBUG
+    console.log('🔍 Full snapshot:', run.includedOutputsSnapshot); // DEBUG
+
+    // If no included outputs snapshot exists, show all outputs (backward compatibility)
+    if (!includedOutputs) {
+      console.log('⚠️ No included outputs snapshot - showing all outputs'); // DEBUG
       return allOutputs;
+    }
+
+    // If included outputs array is empty, show nothing
+    if (includedOutputs.length === 0) {
+      console.log('ℹ️ Included outputs is empty array - showing nothing'); // DEBUG
+      return {};
     }
 
     // Filter to only show included outputs
@@ -76,10 +93,16 @@ export class WorkflowRunsPage implements OnInit {
     for (const key of includedOutputs) {
       if (key in allOutputs) {
         filtered[key] = allOutputs[key];
+        console.log(`✅ Including output: ${key} = ${allOutputs[key]}`); // DEBUG
+      } else {
+        console.log(`⚠️ Included output "${key}" not found in actual outputs`); // DEBUG
       }
     }
+
+    console.log('🔍 Filtered outputs:', filtered); // DEBUG
     return filtered;
   }
+
   getInputVarsForStep(runSteps: RunStepRunDto[], index: number): Record<string, unknown> {
     const vars: Record<string, unknown> = {};
     for (let i = 0; i < index; i++) {
