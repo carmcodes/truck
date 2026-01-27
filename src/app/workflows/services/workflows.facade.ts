@@ -340,6 +340,7 @@ export class WorkflowsFacade {
     this.error.set(null);
 
     try {
+      // First, save the workflow metadata
       if (!wf.id || wf.id === 0) {
         const payload: CreateWorkflowRequest = {
           name: wf.name,
@@ -361,6 +362,37 @@ export class WorkflowsFacade {
 
       const updated = await firstValueFrom(this.api.updateWorkflow(payload));
       this.workflow.set(updated);
+
+      // ✅ Save all step scripts with their included outputs
+      console.log('💾 Saving all step scripts...');
+      const updatedStatus = { ...this.stepScriptSavedStatus() };
+
+      for (const step of this.stepsState()) {
+        const script = this.getStepScript(step.id);
+        const includedOutputs = this.getIncludedOutputs(step.id);
+
+        // Only save if there's a script
+        if (script && script.trim() !== '') {
+          console.log(`💾 Saving step ${step.id} (${step.alias}):`, {
+            scriptLength: script.length,
+            includedOutputs
+          });
+
+          await firstValueFrom(
+            this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+          );
+
+          // Mark script as saved
+          updatedStatus[step.id] = true;
+        }
+      }
+
+      // ✅ Update and persist saved status for all steps
+      this.stepScriptSavedStatus.set(updatedStatus);
+      this.saveScriptSavedStatusToStorage(wf.id, updatedStatus);
+
+      console.log('✅ Workflow and all scripts saved successfully');
+
     } catch (e: any) {
       this.error.set(e?.message ?? "Failed to save workflow");
     } finally {
