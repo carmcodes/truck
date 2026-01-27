@@ -82,12 +82,30 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges, OnDe
       automaticLayout: true,
       minimap: {enabled: false},
       suggestOnTriggerCharacters: true,
-      quickSuggestions: true
+      quickSuggestions: {
+        other: true,
+        comments: false,
+        strings: false
+      },
+      // ✅ Enable Ctrl+Space explicitly
+      suggest: {
+        showKeywords: true,
+        showSnippets: false
+      }
     });
 
     this.codeVars = extractVarsFromCode(this.code ?? '') as WorkflowVar[];
 
     registerWorkflowCompletion(() => this.getAllVars());
+
+    // ✅ Listen for marker changes to emit errors
+    this.disposers.push(
+      monaco.editor.onDidChangeMarkers((uris) => {
+        if (this.model && uris.some(uri => uri.toString() === this.model!.uri.toString())) {
+          this.emitErrors();
+        }
+      })
+    );
 
     this.disposers.push(
       this.model.onDidChangeContent(() => {
@@ -101,16 +119,16 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges, OnDe
           if (this.model) {
             this.monacodiag.applyWorkflowDiagnostics(this.model, this.getAllVars());
           }
-        }, 200);
+        }, 300); // ✅ Increased debounce for better performance
       })
     );
 
-    this.monacodiag.applyWorkflowDiagnostics(this.model, this.getAllVars());
-    this.diagTimer = setTimeout(() => {
-      this.monacodiag.applyWorkflowDiagnostics(this.model!, this.getAllVars());
-      this.emitErrors();
-    }, 200);
-
+    // Initial diagnostics
+    setTimeout(() => {
+      if (this.model) {
+        this.monacodiag.applyWorkflowDiagnostics(this.model, this.getAllVars());
+      }
+    }, 100);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -130,6 +148,7 @@ export class MonacoStepEditorComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.diagTimer);
     this.disposers.forEach((d) => d.dispose());
     this.editor?.dispose();
     this.model?.dispose();

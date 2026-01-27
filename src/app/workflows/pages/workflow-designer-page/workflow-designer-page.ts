@@ -95,6 +95,14 @@ export class WorkflowDesignerPage implements OnInit {
     this.facade.selectStep(stepId);
   }
 
+  hasScriptErrors(): boolean {
+    const step = this.facade.selectedStep();
+    if (!step) return false;
+
+    const errors = this.facade.stepSyntaxErrors()[step.id] ?? [];
+    return errors.length > 0;
+  }
+
   onCodeChange(code: string) {
     const step = this.selectedStep();
     if (!step) return;

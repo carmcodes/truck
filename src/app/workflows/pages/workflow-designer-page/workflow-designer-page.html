@@ -188,14 +188,14 @@
                     </div>
 
                     <div style="display:flex; gap:8px; align-items:center;">
-                        <button
-                                (click)="saveScript()"
-                                [disabled]="facade.saving() || !facade.selectedStep()"
-                                style="font-weight:800;"
-                                title="Uploads script + selected outputs"
-                        >
-                            Save Script
-                        </button>
+                      <button
+                        (click)="saveScript()"
+                        [disabled]="facade.saving() || !facade.selectedStep() || hasScriptErrors()"
+                        [title]="hasScriptErrors() ? 'Fix syntax errors before saving' : 'Uploads script + selected outputs'"
+                        style="font-weight:800;"
+                      >
+                        Save Script
+                      </button>
                     </div>
                 </div>
 
