@@ -277,7 +277,7 @@ export class WorkflowsFacade {
       updatedAt: new Date().toISOString(),
     });
   }
-  
+
   selectStep(stepId: Id) {
     this.selectedStepId.set(stepId);
   }
