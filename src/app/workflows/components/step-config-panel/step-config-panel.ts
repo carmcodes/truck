@@ -1,4 +1,4 @@
-import {Component, EventEmitter, Input, Output, signal} from "@angular/core";
+import {Component, EventEmitter, Input, Output, signal, SimpleChanges} from "@angular/core";
 import type { StepDto, Id } from "../../models/workflow-models";
 import {WorkflowVar} from "../monaco-step-editor/workflow-vars";
 
@@ -102,12 +102,15 @@ export class StepConfigPanelComponent {
 
   aliasError = signal<boolean>(false);
   currentAliasValue = signal<string>('');
+  lastValidAlias = signal<string>('');
 
-  ngOnChanges() {
+  ngOnChanges(changes: SimpleChanges) {
     // Sync the current alias value when step changes
-    if (this.step) {
-      this.currentAliasValue.set(this.step.alias || '');
-      this.aliasError.set(this.step.alias?.includes(' ') || false);
+    if (changes['step'] && this.step) {
+      const alias = this.step.alias || '';
+      this.currentAliasValue.set(alias);
+      this.lastValidAlias.set(alias);
+      this.aliasError.set(alias.includes(' '));
     }
   }
 
@@ -122,9 +125,22 @@ export class StepConfigPanelComponent {
       return;
     }
 
-    // Clear error and emit valid value
+    // Clear error
     this.aliasError.set(false);
-    this.emitPatch({ alias: value });
+
+    // Only emit if the value has actually changed from the last valid value
+    if (value !== this.lastValidAlias()) {
+      this.lastValidAlias.set(value);
+      this.emitPatch({ alias: value });
+    }
+  }
+
+  handleAliasBlur() {
+    // On blur, if there's an error, revert to last valid value
+    if (this.aliasError()) {
+      this.currentAliasValue.set(this.lastValidAlias());
+      this.aliasError.set(false);
+    }
   }
 
   emitPatch(patch: Partial<StepDto>) {
