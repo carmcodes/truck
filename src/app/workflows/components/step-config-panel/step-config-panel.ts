@@ -1,4 +1,4 @@
-import {Component, EventEmitter, Input, Output, signal, SimpleChanges} from "@angular/core";
+import {Component, EventEmitter, Input, Output, signal, OnChanges, SimpleChanges} from "@angular/core";
 import type { StepDto, Id } from "../../models/workflow-models";
 import {WorkflowVar} from "../monaco-step-editor/workflow-vars";
 import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
@@ -32,26 +32,26 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
           </div>
 
           <div style="grid-column: 1 / -1;">
-          <label ds-label style="font-size:12px; font-weight:800;">Alias</label>
-          <input ds-input
-              style="width:100%; border: 1px solid; padding: 6px;"
-              [style.border-color]="aliasError() ? '#b00020' : '#ccc'"
-              [value]="step.alias"
-              (input)="handleAliasInput($any($event.target).value)"
-          />
-          <div style="font-size:12px; margin-top:6px; line-height:1.35;">
-            @if(aliasError()){
-              <span style="color: #b00020; font-weight: 600;">⚠ Alias cannot contain spaces. Use underscores or camelCase instead.</span>
-            } @else {
-              <span style="opacity:.7;">
+            <label ds-label style="font-size:12px; font-weight:800;">Alias</label>
+            <input ds-input
+                   style="width:100%; border: 1px solid; padding: 6px;"
+                   [style.border-color]="aliasError() ? '#b00020' : '#ccc'"
+                   [value]="currentAliasValue()"
+                   (input)="handleAliasInput($any($event.target).value)"
+            />
+            <div style="font-size:12px; margin-top:6px; line-height:1.35;">
+              @if(aliasError()){
+                <span style="color: #b00020; font-weight: 600;">⚠ Alias cannot contain spaces. Use underscores or camelCase instead.</span>
+              } @else {
+                <span style="opacity:.7;">
                   This alias is used for namespacing inputs and outputs in run results:
                   <code style="background:#fafafa; padding:1px 6px; border-radius:8px; border:1px solid #eee;">
                     Inputs.{{ step.alias || "ALIAS" }}.*
                   </code>
                 </span>
-            }
+              }
+            </div>
           </div>
-        </div>
 
           <div style="grid-column: 1 / -1;">
             <ds-form-field>
@@ -68,9 +68,9 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
             <ds-form-field>
               <label ds-label style="font-size:12px; font-weight:600;">Cacheable</label>
               <input
-                     type="checkbox"
-                     [checked]="step.cacheable"
-                     (change)="emitPatch({ cacheable: $any($event.target).checked })"
+                type="checkbox"
+                [checked]="currentCacheableValue()"
+                (change)="handleCacheableChange($any($event.target).checked)"
               />
             </ds-form-field>
           </div>
@@ -89,7 +89,7 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
     </div>
   `,
 })
-export class StepConfigPanelComponent {
+export class StepConfigPanelComponent implements OnChanges {
   @Input() step: StepDto | null = null;
   @Input() steps: StepDto[] = [];
   @Input() stepIndex : number = 0;
@@ -99,6 +99,9 @@ export class StepConfigPanelComponent {
   currentAliasValue = signal<string>('');
   lastValidAlias = signal<string>('');
 
+  currentCacheableValue = signal<boolean>(false);
+  lastCacheableValue = signal<boolean>(false);
+
   ngOnChanges(changes: SimpleChanges) {
     // Sync the current alias value when step changes
     if (changes['step'] && this.step) {
@@ -106,6 +109,10 @@ export class StepConfigPanelComponent {
       this.currentAliasValue.set(alias);
       this.lastValidAlias.set(alias);
       this.aliasError.set(alias.includes(' '));
+
+      // Sync cacheable value
+      this.currentCacheableValue.set(this.step.cacheable);
+      this.lastCacheableValue.set(this.step.cacheable);
     }
   }
 
@@ -130,11 +137,14 @@ export class StepConfigPanelComponent {
     }
   }
 
-  handleAliasBlur() {
-    // On blur, if there's an error, revert to last valid value
-    if (this.aliasError()) {
-      this.currentAliasValue.set(this.lastValidAlias());
-      this.aliasError.set(false);
+  handleCacheableChange(checked: boolean) {
+    // Update the displayed value immediately
+    this.currentCacheableValue.set(checked);
+
+    // Only emit if the value has actually changed from the last value
+    if (checked !== this.lastCacheableValue()) {
+      this.lastCacheableValue.set(checked);
+      this.emitPatch({ cacheable: checked });
     }
   }
 
