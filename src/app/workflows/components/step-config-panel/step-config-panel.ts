@@ -33,50 +33,54 @@ import {WorkflowVar} from "../monaco-step-editor/workflow-vars";
       @if (step) {
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div style="grid-column: 1 / -1;">
-              <label style="font-size:12px; font-weight:600;">Name</label>
-              <input
-                     style="width:100%;"
-                     [value]="step.name"
-                     (input)="emitPatch({ name: $any($event.target).value })"
-              />
+            <label style="font-size:12px; font-weight:600;">Name</label>
+            <input
+              style="width:100%;"
+              [value]="step.name"
+              (input)="emitPatch({ name: $any($event.target).value })"
+            />
           </div>
 
           <div style="grid-column: 1 / -1;">
             <label style="font-size:12px; font-weight:800;">Alias</label>
             <input
-                style="width:100%;"
-                [value]="step.alias"
-                (input)="emitPatch({ alias: $any($event.target).value })"
+              style="width:100%; border: 1px solid; border-radius: 4px; padding: 6px;"
+              [style.border-color]="aliasError() ? '#b00020' : '#ccc'"
+              [value]="step.alias"
+              (input)="handleAliasInput($any($event.target).value)"
             />
-            <div style="font-size:12px; opacity:.7; margin-top:6px; line-height:1.35;">
+            <div style="font-size:12px; margin-top:6px; line-height:1.35;">
               @if(aliasError()){
-                <span style="color: #b00020">Your alias cannot contain empty spaces.</span>
+                <span style="color: #b00020; font-weight: 600;">⚠ Alias cannot contain spaces. Use underscores or camelCase instead.</span>
+              } @else {
+                <span style="opacity:.7;">
+                  This alias is used for namespacing inputs and outputs in run results:
+                  <code style="background:#fafafa; padding:1px 6px; border-radius:8px; border:1px solid #eee;">
+                    Inputs.{{ step.alias || "ALIAS" }}.*
+                  </code>
+                </span>
               }
-              This alias is used for namespacing inputs and outputs in run results:
-              <code style="background:#fafafa; padding:1px 6px; border-radius:8px; border:1px solid #eee;">
-                Inputs.{{ step.alias || "ALIAS" }}.*
-              </code>
             </div>
           </div>
 
           <div style="grid-column: 1 / -1;">
             <label style="font-size:12px; font-weight:800;">Description</label>
             <textarea
-                style="width:100%; height:80px;"
-                [value]="step.description"
-                (input)="emitPatch({ description: $any($event.target).value })"
+              style="width:100%; height:80px;"
+              [value]="step.description"
+              (input)="emitPatch({ description: $any($event.target).value })"
             ></textarea>
           </div>
 
           <div style="display:flex; gap:10px; align-items:center;">
             <input
-                type="checkbox"
-                [checked]="step.cacheable"
-                (change)="emitPatch({ cacheable: $any($event.target).checked })"
+              type="checkbox"
+              [checked]="step.cacheable"
+              (change)="emitPatch({ cacheable: $any($event.target).checked })"
             />
             <div>
               <div style="font-size:12px; font-weight:800;">Cacheable</div>
-              <div style="font-size:12px; opacity:.7;">Reuse output if inputs didn’t change</div>
+              <div style="font-size:12px; opacity:.7;">Reuse output if inputs didn't change</div>
             </div>
           </div>
 
@@ -98,16 +102,21 @@ export class StepConfigPanelComponent {
 
   aliasError = signal<boolean>(false);
 
+  handleAliasInput(value: string) {
+    // Check for spaces
+    if (value.includes(' ')) {
+      this.aliasError.set(true);
+      // Don't emit the patch - prevent backend error
+      return;
+    }
+
+    // Clear error and emit valid value
+    this.aliasError.set(false);
+    this.emitPatch({ alias: value });
+  }
+
   emitPatch(patch: Partial<StepDto>) {
     if (!this.step) return;
-    if(patch.alias){
-      if(patch.alias.includes(' ')){
-        this.aliasError.set(true);
-      }
-      else {
-        this.aliasError.set(false);
-      }
-    }
     this.patchStep.emit({ stepId: this.step.id, patch });
   }
 }
