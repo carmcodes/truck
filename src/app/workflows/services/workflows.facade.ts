@@ -35,11 +35,12 @@ export class WorkflowsFacade {
 
   readonly stepVarsByStepId = signal<Record<number, Record<string, WorkflowVar>>>({});
 
+  // ✅ Changed from globalInputs to inputsByStepId for per-step scoping
+  readonly inputsByStepId = signal<Record<number, Record<string, unknown>>>({});
+
   readonly stepSyntaxErrors = signal<Record<number, string[]>>({});
 
   readonly includedOutputsByStepId = signal<Record<number, string[]>>({});
-
-  readonly inputsByStepId = signal<Record<number, Record<string, unknown>>>({});
 
   readonly exportTypes = signal<ExportTypeDto[]>([]);
 
@@ -50,13 +51,12 @@ export class WorkflowsFacade {
     return id == null ? null : this.stepsState().find(s => s.id === id) ?? null;
   });
 
-  stepCount: number = 0;
-
+  // ✅ Helper method to get step index
   private getStepIndexById(stepId: number): number {
-    return this.stepsState().findIndex(s => s.id === stepId); // 0-based
+    return this.stepsState().findIndex(s => s.id === stepId);
   }
 
-  /** Inputs visible at a given step = all uploaded inputs from step0..thisStep (inclusive) */
+  // ✅ Get inputs visible at a specific step (current step and all previous steps)
   getInputsVisibleAtStep(stepId: number): Record<string, unknown> {
     const idx = this.getStepIndexById(stepId);
     if (idx < 0) return {};
@@ -65,6 +65,7 @@ export class WorkflowsFacade {
     const byStep = this.inputsByStepId();
 
     const merged: Record<string, unknown> = {};
+    // Merge inputs from step 0 up to and including current step
     for (let i = 0; i <= idx; i++) {
       const sid = steps[i]?.id;
       if (!sid) continue;
@@ -72,7 +73,6 @@ export class WorkflowsFacade {
     }
     return merged;
   }
-
 
   readonly availableVariablesForSelectedStep = computed<WorkflowVar[]>(() => {
     const steps = this.stepsState();
@@ -84,13 +84,13 @@ export class WorkflowsFacade {
 
     const out: WorkflowVar[] = [];
 
-    // ✅ Inputs visible at this step only (no backward leakage)
+    // ✅ Only get inputs visible at THIS step (current + previous steps)
     const visibleInputs = this.getInputsVisibleAtStep(selectedId);
     for (const k of Object.keys(visibleInputs ?? {})) {
       out.push({ name: k, kind: "unknown", source: "input" } as any);
     }
 
-    // ✅ Vars from steps up to and including current step
+    // Variables from previous and current steps
     const varsByStep = this.stepVarsByStepId();
     for (let i = 0; i <= idx; i++) {
       const sid = steps[i].id;
@@ -128,13 +128,12 @@ export class WorkflowsFacade {
     this.loading.set(true);
     this.error.set(null);
 
-    // ✅ Clear state at the start of loading
+    // ✅ Clear all state when loading a workflow
     this.stepScriptByStepId.set({});
     this.stepVarsByStepId.set({});
     this.stepSyntaxErrors.set({});
     this.includedOutputsByStepId.set({});
-    this.inputsByStepId.set({}); // ✅ Clear inputs from previous workflow
-    this.stepCount = 0;
+    this.inputsByStepId.set({}); // ✅ Clear per-step inputs
 
     try {
       const listRes = await firstValueFrom(this.api.getWorkflows());
@@ -171,13 +170,12 @@ export class WorkflowsFacade {
     this.selectedStepId.set(null);
     this.error.set(null);
 
-    // ✅ ADD THESE LINES - Clear all step-related state
+    // ✅ Clear all step-related state
     this.stepScriptByStepId.set({});
     this.stepVarsByStepId.set({});
     this.stepSyntaxErrors.set({});
     this.includedOutputsByStepId.set({});
-    this.inputsByStepId.set({}); // ✅ This is the critical one for your bug
-    this.stepCount = 0;
+    this.inputsByStepId.set({}); // ✅ Clear per-step inputs
   }
 
   private mapListItemToWorkflowDto(item: WorkflowListItemDto): WorkflowDto {
@@ -274,8 +272,8 @@ export class WorkflowsFacade {
   }
 
   getStepDisplayIndex(stepId: Id): number {
-    const idx = this.stepsState().findIndex(s => s.id === stepId);
-    return idx >= 0 ? idx + 1 : 0; // 0 means unknown
+    const index = this.stepsState().findIndex(step => step.id === stepId);
+    return index >= 0 ? index + 1 : 0;
   }
 
   async addStep(script: string = "") {
@@ -303,8 +301,6 @@ export class WorkflowsFacade {
       };
 
       const created = await firstValueFrom(this.api.createStep(payload));
-      this.stepCount += 1;
-      created.stepNumber = this.stepCount;
       this.stepsState.set([...this.stepsState(), created]);
       this.selectedStepId.set(created.id);
 
@@ -342,7 +338,6 @@ export class WorkflowsFacade {
   }
 
   async deleteLastStep() {
-    this.stepCount -= 1;
     const wf = this.workflow();
     if (!wf?.id) return;
     if (this.stepsState().length === 0) return;
@@ -383,7 +378,7 @@ export class WorkflowsFacade {
 
     try {
       await firstValueFrom(
-          this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+        this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
       );
       await this.refreshSteps();
     } catch (e: any) {
@@ -403,7 +398,7 @@ export class WorkflowsFacade {
     try {
       const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
 
-      // ✅ store inputs under this step only
+      // ✅ Store inputs under THIS specific step only
       const next = { ...this.inputsByStepId() };
       next[step.id] = { ...(next[step.id] ?? {}), ...(res.inputs ?? {}) };
       this.inputsByStepId.set(next);
@@ -414,7 +409,6 @@ export class WorkflowsFacade {
       this.saving.set(false);
     }
   }
-
 
   async loadExportTypes() {
     try {
