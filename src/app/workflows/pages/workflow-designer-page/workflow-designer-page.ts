@@ -69,10 +69,6 @@ export class WorkflowDesignerPage {
     this.facade.saveSelectedStepScript();
   }
 
-  run() {
-    this.facade.runWorkflow(this.runExtension());
-  }
-
   isScriptSaved(): boolean {
     const step = this.facade.selectedStep();
     if (!step) return false;
@@ -97,9 +93,24 @@ export class WorkflowDesignerPage {
     return errors.length > 0;
   }
 
+  async run() {
+    await this.facade.runWorkflow(this.runExtension());
+
+    // Navigate to runs page after workflow completes
+    const wf = this.facade.workflow();
+    if (wf?.id) {
+      this.router.navigate(['/workflows', wf.id, 'runs']);
+    }
+  }
+
   canRun(): boolean {
     const wf = this.facade.workflow();
     if (!wf?.id) return false;
+
+    // Don't allow running if already running
+    if (this.facade.running()) {
+      return false;
+    }
 
     // Check for syntax errors
     if (this.facade.hasAnySyntaxErrors()) {
