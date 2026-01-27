@@ -128,6 +128,14 @@ export class WorkflowsFacade {
     this.loading.set(true);
     this.error.set(null);
 
+    // ✅ Clear state at the start of loading
+    this.stepScriptByStepId.set({});
+    this.stepVarsByStepId.set({});
+    this.stepSyntaxErrors.set({});
+    this.includedOutputsByStepId.set({});
+    this.inputsByStepId.set({}); // ✅ Clear inputs from previous workflow
+    this.stepCount = 0;
+
     try {
       const listRes = await firstValueFrom(this.api.getWorkflows());
       const item = listRes.workflows.find(w => w.id === workflowId);
@@ -162,6 +170,14 @@ export class WorkflowsFacade {
     this.stepsState.set([]);
     this.selectedStepId.set(null);
     this.error.set(null);
+
+    // ✅ ADD THESE LINES - Clear all step-related state
+    this.stepScriptByStepId.set({});
+    this.stepVarsByStepId.set({});
+    this.stepSyntaxErrors.set({});
+    this.includedOutputsByStepId.set({});
+    this.inputsByStepId.set({}); // ✅ This is the critical one for your bug
+    this.stepCount = 0;
   }
 
   private mapListItemToWorkflowDto(item: WorkflowListItemDto): WorkflowDto {
