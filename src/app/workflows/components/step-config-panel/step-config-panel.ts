@@ -101,8 +101,20 @@ export class StepConfigPanelComponent {
   @Output() patchStep = new EventEmitter<{ stepId: Id; patch: Partial<StepDto> }>();
 
   aliasError = signal<boolean>(false);
+  currentAliasValue = signal<string>('');
+
+  ngOnChanges() {
+    // Sync the current alias value when step changes
+    if (this.step) {
+      this.currentAliasValue.set(this.step.alias || '');
+      this.aliasError.set(this.step.alias?.includes(' ') || false);
+    }
+  }
 
   handleAliasInput(value: string) {
+    // Update the displayed value immediately
+    this.currentAliasValue.set(value);
+
     // Check for spaces
     if (value.includes(' ')) {
       this.aliasError.set(true);
