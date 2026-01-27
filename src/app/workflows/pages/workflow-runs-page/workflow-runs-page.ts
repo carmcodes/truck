@@ -32,9 +32,29 @@ export class WorkflowRunsPage implements OnInit {
 
   refresh() {
     const list = loadRuns(this.workflowId());
+    console.log('📊 All runs loaded:', list);
     this.runs.set(list);
     this.selectedRunId.set(list[0]?.runId ?? null);
     this.expandedStepId.set(null);
+
+    if (list[0]) {
+      console.log('🔍 First run details:', {
+        runId: list[0].runId,
+        stepRuns: list[0].result.stepRuns,
+        includedOutputsSnapshot: list[0].includedOutputsSnapshot,
+        inputsByStepId: list[0].inputsByStepId
+      });
+
+      // Log each step's outputs
+      list[0].result.stepRuns?.forEach((step, idx) => {
+        console.log(`📦 Step ${idx} (ID: ${step.stepId}, Name: ${step.stepName}):`, {
+          outputs: step.outputs,
+          variables: step.outputs?.variables,
+          status: step.status,
+          cached: step.cached
+        });
+      });
+    }
   }
 
   selectRun(runId: string) {
@@ -43,7 +63,19 @@ export class WorkflowRunsPage implements OnInit {
   }
 
   toggleStep(stepId: number) {
-    this.expandedStepId.set(this.expandedStepId() === stepId ? null : stepId);
+    const newExpandedId = this.expandedStepId() === stepId ? null : stepId;
+    this.expandedStepId.set(newExpandedId);
+
+    if (newExpandedId) {
+      const run = this.selectedRun();
+      const step = run?.result.stepRuns?.find(s => s.stepId === stepId);
+      console.log('🔍 Expanded step details:', {
+        stepId,
+        step,
+        outputs: step?.outputs,
+        variables: step?.outputs?.variables
+      });
+    }
   }
 
   backToDesigner() {
@@ -59,7 +91,6 @@ export class WorkflowRunsPage implements OnInit {
     return s.status ? 'Succeeded' : 'Failed';
   }
 
-  // ✅ Get outputs for a step - filtered by included outputs
   getOutputVars(step: RunStepRunDto): Record<string, unknown> {
     const run = this.selectedRun();
     if (!run) {
@@ -67,21 +98,28 @@ export class WorkflowRunsPage implements OnInit {
       return {};
     }
 
+    console.log('🔍 getOutputVars for step:', step.stepId);
+    console.log('  Raw step object:', step);
+    console.log('  step.outputs:', step.outputs);
+    console.log('  step.outputs?.variables:', step.outputs?.variables);
+
     const allOutputs = step.outputs?.variables ?? {};
-    console.log('📊 All outputs from step', step.stepId, ':', allOutputs);
+    const outputKeys = Object.keys(allOutputs);
+    console.log('  All output keys:', outputKeys);
+    console.log('  All outputs:', allOutputs);
 
     const includedOutputs = run.includedOutputsSnapshot?.[step.stepId];
-    console.log('📸 Included outputs for step', step.stepId, ':', includedOutputs);
+    console.log('  Included outputs from snapshot:', includedOutputs);
 
-    // If no snapshot exists, show all outputs (backward compatibility)
+    // If no snapshot exists, show all outputs
     if (!includedOutputs) {
-      console.log('⚠️ No included outputs snapshot - showing all outputs');
+      console.log('  ⚠️ No snapshot - returning all outputs:', allOutputs);
       return allOutputs;
     }
 
-    // If snapshot exists but is empty array, show nothing
+    // If snapshot exists but is empty, show nothing
     if (includedOutputs.length === 0) {
-      console.log('ℹ️ Included outputs is empty - showing nothing');
+      console.log('  ℹ️ Empty snapshot - returning empty object');
       return {};
     }
 
@@ -90,69 +128,79 @@ export class WorkflowRunsPage implements OnInit {
     for (const key of includedOutputs) {
       if (key in allOutputs) {
         filtered[key] = allOutputs[key];
-        console.log(`✅ Including output: ${key}`);
+        console.log(`  ✅ Including: ${key} = ${allOutputs[key]}`);
       } else {
-        console.log(`⚠️ Included output "${key}" not found in actual outputs`);
+        console.log(`  ⚠️ Key "${key}" not found in actual outputs`);
       }
     }
 
-    console.log('✅ Filtered outputs:', filtered);
+    console.log('  Final filtered outputs:', filtered);
     return filtered;
   }
 
-  // ✅ Get input variables for a step - includes file inputs + previous step outputs
   getInputVarsForStep(run: StoredRun, stepIndex: number, stepId: number): Record<string, unknown> {
     const vars: Record<string, unknown> = {};
 
     console.log(`🔍 Getting inputs for step ${stepId} (index ${stepIndex})`);
+    console.log('  Run object:', run);
+    console.log('  inputsByStepId:', run.inputsByStepId);
 
-    // 1. Add file inputs from inputsByStepId for all steps up to current step
-    // These are the JSON files uploaded via the Inputs panel
+    // 1. Add file inputs from inputsByStepId
     if (run.inputsByStepId) {
       const steps = run.result.stepRuns ?? [];
       for (let i = 0; i <= stepIndex; i++) {
         const prevStepId = steps[i]?.stepId;
         if (prevStepId && run.inputsByStepId[prevStepId]) {
           const stepInputs = run.inputsByStepId[prevStepId];
-          console.log(`📥 Adding file inputs from step ${prevStepId}:`, stepInputs);
+          console.log(`  📥 File inputs from step ${prevStepId}:`, stepInputs);
           Object.assign(vars, stepInputs);
         }
       }
     }
 
-    // 2. Add outputs from previous steps (not current step)
+    // 2. Add outputs from previous steps
     const stepRuns = run.result.stepRuns ?? [];
+    console.log('  Total step runs:', stepRuns.length);
+
     for (let i = 0; i < stepIndex; i++) {
       const prevStep = stepRuns[i];
+      console.log(`  Checking previous step ${i} (ID: ${prevStep?.stepId}):`, prevStep);
+
       if (prevStep?.outputs?.variables) {
-        // Get the included outputs for this previous step
+        console.log(`    Previous step ${prevStep.stepId} has variables:`, prevStep.outputs.variables);
+
         const prevStepIncludedOutputs = run.includedOutputsSnapshot?.[prevStep.stepId];
+        console.log(`    Included outputs for step ${prevStep.stepId}:`, prevStepIncludedOutputs);
 
         if (prevStepIncludedOutputs && prevStepIncludedOutputs.length > 0) {
-          // Only include the selected outputs from previous steps
+          // Only include selected outputs
           for (const key of prevStepIncludedOutputs) {
             if (key in prevStep.outputs.variables) {
               vars[key] = prevStep.outputs.variables[key];
-              console.log(`✅ Adding output from step ${prevStep.stepId}: ${key}`);
+              console.log(`    ✅ Adding: ${key} = ${prevStep.outputs.variables[key]}`);
             }
           }
         } else if (!prevStepIncludedOutputs) {
-          // No snapshot - include all outputs (backward compatibility)
-          console.log(`📤 Adding all outputs from step ${prevStep.stepId}`);
+          // No snapshot - include all
+          console.log(`    📤 No snapshot - adding all outputs`);
           Object.assign(vars, prevStep.outputs.variables);
         }
-        // If prevStepIncludedOutputs exists but is empty, don't add anything
+      } else {
+        console.log(`    ⚠️ Previous step has no variables`);
       }
     }
 
-    console.log(`✅ Total input variables for step ${stepId}:`, vars);
+    console.log(`  ✅ Final input vars:`, vars);
     return vars;
   }
 
   toVarRows(vars: Record<string, unknown>): { key: string; value: string; type: string }[] {
+    console.log('🔄 Converting vars to rows:', vars);
     const rows: { key: string; value: string; type: string }[] = [];
 
     const keys = Object.keys(vars ?? {}).sort((a, b) => a.localeCompare(b));
+    console.log('  Keys:', keys);
+
     for (const k of keys) {
       const v = (vars as any)[k];
       rows.push({
@@ -161,6 +209,8 @@ export class WorkflowRunsPage implements OnInit {
         type: this.valueType(v)
       });
     }
+
+    console.log('  Resulting rows:', rows);
     return rows;
   }
 
