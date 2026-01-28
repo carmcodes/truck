@@ -808,39 +808,27 @@ export class WorkflowsFacade {
       const runPayload = { workflowId: wf.id, extension };
       console.log('📤 Running workflow with payload:', runPayload);
 
-      const res = await firstValueFrom(this.api.runWorkflow(runPayload));
-
-      console.log('📊 BACKEND RUN RESULT:', res);
-      console.log('📊 Step runs details:');
-      res.stepRuns?.forEach((stepRun, idx) => {
-        console.log(`  Step ${idx} (ID: ${stepRun.stepId}, Name: ${stepRun.stepName}):`, {
-          status: stepRun.status,
-          cached: stepRun.cached,
-          hasOutputs: !!stepRun.outputs,
-          outputsObject: stepRun.outputs,
-          variables: stepRun.outputs?.variables,
-          variableKeys: Object.keys(stepRun.outputs?.variables ?? {}),
-          logs: stepRun.logs?.substring(0, 100)
-        });
-      });
-
+      const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
       this.lastRun.set(res);
       this.lastRunExtension.set(extension);
 
+// 1) snapshot included outputs at run time
       const includedOutputsSnapshot: Record<number, string[]> = {};
       for (const step of this.stepsState()) {
-        const outputs = this.getIncludedOutputs(step.id);
-        includedOutputsSnapshot[step.id] = outputs;
+        includedOutputsSnapshot[step.id] = this.getIncludedOutputs(step.id);
       }
 
-      const inputsByStepId = { ...this.inputsByStepId() };
+// 2) ✅ snapshot script-declared vars at run time
+      const scriptVarsByStepId: Record<number, string[]> = {};
+      const varsMap = this.stepVarsByStepId(); // Record<stepId, Record<varName, WorkflowVar>>
+      for (const step of this.stepsState()) {
+        scriptVarsByStepId[step.id] = Object.keys(varsMap[step.id] ?? {});
+      }
 
-      console.log('📸 CAPTURING RUN SNAPSHOT:', {
-        includedOutputsSnapshot,
-        inputsByStepId
-      });
+// 3) ✅ also persist uploaded inputs if you’re using them in Runs page
+      const inputsByStepId = this.inputsByStepId(); // Record<stepId, {...}>
 
-      const runToSave: StoredRun = {
+      saveRun(wf.id, {
         runId: crypto.randomUUID(),
         workflowId: wf.id,
         createdAt: new Date().toISOString(),
@@ -848,10 +836,9 @@ export class WorkflowsFacade {
         result: res,
         includedOutputsSnapshot,
         inputsByStepId,
-      };
+        scriptVarsByStepId,
+      });
 
-      console.log('💾 SAVING RUN TO LOCALSTORAGE:', runToSave);
-      saveRun(wf.id, runToSave);
 
       console.log('✅ Run saved successfully');
     } catch (e: any) {
@@ -861,4 +848,6 @@ export class WorkflowsFacade {
       this.running.set(false);
     }
   }
+
+
 }

@@ -1,15 +1,23 @@
 // workflow-run.store.ts
 import type {Id, RunWorkflowResponse} from '../models/workflow-models';
 
-export interface StoredRun {
+export type StoredRun = {
   runId: string;
-  workflowId: Id;
+  workflowId: number;
   createdAt: string;
   extension: string;
-  result: RunWorkflowResponse;
-  includedOutputsSnapshot: Record<number, string[]>; // stepId -> selected variable names
-  inputsByStepId: Record<number, Record<string, unknown>>; // stepId -> uploaded file inputs
-}
+  result: any; // RunWorkflowResponse
+
+  // ✅ already used for filtering output display
+  includedOutputsSnapshot?: Record<number, string[]>;
+
+  // ✅ uploaded json inputs by step
+  inputsByStepId?: Record<number, Record<string, unknown>>;
+
+  // ✅ NEW: declared vars per step at run time (from scripts)
+  scriptVarsByStepId?: Record<number, string[]>;
+};
+
 
 function key(workflowId: Id) {
   return `wf:runs:${workflowId}`;
