@@ -146,47 +146,24 @@ export class StepConfigPanelComponent implements OnChanges, OnDestroy {
   handleCacheableChange(checked: boolean) {
     if (!this.step) return;
 
-    console.log('🔘 Cacheable checkbox clicked:', {
-      newValue: checked,
-      currentStepValue: this.step.cacheable,
-      lastTrackedValue: this.lastCacheableValue(),
-      willUpdate: checked !== this.step.cacheable
-    });
-
-    // Only emit if the value is different from what the backend has
+    // Only update if value actually changed
     if (checked === this.step.cacheable) {
-      console.log('⏭️ Skipping - value unchanged from backend');
       return;
     }
 
-    // Prevent rapid clicks
+    // Prevent concurrent updates
     if (this.isUpdating()) {
-      console.log('⏭️ Skipping - already updating');
       return;
     }
 
     this.isUpdating.set(true);
-    clearTimeout(this.updateTimer);
+    this.emitPatch({ cacheable: checked });
 
-    // Small delay to debounce
-    this.updateTimer = setTimeout(() => {
-      // Double-check the value hasn't changed
-      if (this.step && checked !== this.step.cacheable) {
-        console.log('✅ Emitting cacheable patch:', checked);
-        this.lastCacheableValue.set(checked);
-        this.emitPatch({ cacheable: checked });
-      } else {
-        console.log('⏭️ Skipping - value synchronized');
-      }
-
-      // Re-enable after backend response time
-      setTimeout(() => {
-        this.isUpdating.set(false);
-        console.log('🔓 Checkbox re-enabled');
-      }, 1000); // Increased from 500ms to 1000ms
-    }, 200); // Increased from 100ms to 200ms
+    // Keep disabled for 1.5 seconds to allow backend to process
+    setTimeout(() => {
+      this.isUpdating.set(false);
+    }, 1500);
   }
-
   emitPatch(patch: Partial<StepDto>) {
     if (!this.step) return;
     console.log('📤 Emitting patch for step', this.step.id, ':', patch);

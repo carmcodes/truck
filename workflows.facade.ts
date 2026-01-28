@@ -155,33 +155,45 @@ export class WorkflowsFacade {
     }
   }
 
+  // In WorkflowsFacade
   async patchStep(stepId: Id, patch: Partial<StepDto>) {
-    const current = this.stepsState().find((s) => s.id === stepId);
-    if (!current) return;
+    const current = this.stepsState().find(s => s.id === stepId);
+    if (!current) {
+      console.error('❌ Step not found:', stepId);
+      return;
+    }
 
-    // Only fields supported by PUT /api/Step: name, description, cacheable, stepId
+    console.log('🔧 Patching step:', {
+      stepId,
+      currentStep: current,
+      patch
+    });
+
     const payload: UpdateStepRequest = {
       stepId,
       name: patch.name ?? current.name,
       description: patch.description ?? current.description,
       cacheable: patch.cacheable ?? current.cacheable,
+      alias: patch.alias ?? current.alias, // ✅ This might be the issue
     };
+
+    console.log('📤 Sending to backend:', payload);
 
     this.saving.set(true);
     this.error.set(null);
 
     try {
       const updated = await firstValueFrom(this.api.updateStep(payload));
-      this.stepsState.set(
-        this.stepsState().map((s) => (s.id === stepId ? updated : s))
-      );
+      console.log('✅ Backend response:', updated);
+
+      this.stepsState.set(this.stepsState().map(s => (s.id === stepId ? updated : s)));
     } catch (e: any) {
+      console.error('❌ Update failed:', e);
       this.error.set(e?.message ?? "Failed to update step");
     } finally {
       this.saving.set(false);
     }
   }
-
   selectStep(stepId: Id) {
     this.selectedStepId.set(stepId);
   }
