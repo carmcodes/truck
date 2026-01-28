@@ -67,48 +67,70 @@ export class WorkflowRunsPage implements OnInit {
   }
 
   /** Returns ONLY the checked variables for this step (from Variables panel snapshot). */
+  /** Normalize keys so input vars match even if alias differs */
+  private normalizeVarName(name: string): string {
+    // Inputs.anyAlias.Var1  -> Var1
+    // step1.Var1            -> Var1 (if you ever use this form)
+    const parts = name.split(".");
+    return parts[parts.length - 1] ?? name;
+  }
+
   getCheckedVarsForStep(run: StoredRun, step: RunStepRunDto): Record<string, unknown> {
     const allOutputs = step.outputs?.variables ?? {};
 
     const selected = run.includedOutputsSnapshot?.[step.stepId] ?? null;
 
-    // Older runs: if snapshot missing, show all outputs
+    // older run: no snapshot -> show whatever backend returned
     if (!selected) return allOutputs;
 
-    // User explicitly selected none -> show none
+    // user selected none
     if (selected.length === 0) return {};
+
+    // Build lookup:
+    // - exact key match (full)
+    // - base-name match (Var1) for inputs where alias can differ
+    const exact = new Map<string, string>();
+    const byBase = new Map<string, string>();
+
+    for (const fullKey of Object.keys(allOutputs)) {
+      exact.set(fullKey, fullKey);
+
+      const base = this.normalizeVarName(fullKey);
+      // if multiple keys share same base, prefer the "Inputs." one when selection is an input
+      if (!byBase.has(base)) byBase.set(base, fullKey);
+      if (fullKey.startsWith("Inputs.") && !byBase.get(base)?.startsWith("Inputs.")) {
+        byBase.set(base, fullKey);
+      }
+    }
 
     const filtered: Record<string, unknown> = {};
 
-    // Build a lookup: "lastSegment" -> fullKey (first win)
-    // Example: Inputs.step1.var1 => lastSegment "var1"
-    const suffixMap = new Map<string, string>();
-    for (const fullKey of Object.keys(allOutputs)) {
-      const last = fullKey.split(".").pop() ?? fullKey;
-      if (!suffixMap.has(last)) suffixMap.set(last, fullKey);
-    }
-
     for (const sel of selected) {
-      // 1) exact match
-      if (sel in allOutputs) {
-        filtered[sel] = (allOutputs as any)[sel];
+      // 1) exact match (when you stored full key)
+      const fullExact = exact.get(sel);
+      if (fullExact) {
+        filtered[this.normalizeVarName(fullExact)] = (allOutputs as any)[fullExact];
         continue;
       }
 
-      // 2) suffix match (Var1 -> Inputs.alias.Var1)
-      const fullKey = suffixMap.get(sel);
-      if (fullKey) {
-        filtered[sel] = (allOutputs as any)[fullKey];
+      // 2) base-name match (when you stored Var1, or alias changed)
+      const base = this.normalizeVarName(sel);
+      const full = byBase.get(base) ?? byBase.get(base.toLowerCase());
+      if (full) {
+        filtered[base] = (allOutputs as any)[full];
         continue;
       }
 
-      // 3) case-insensitive suffix match (Var1 vs var1)
-      const lower = sel.toLowerCase();
-      const hit = [...suffixMap.entries()].find(([k]) => k.toLowerCase() === lower);
+      // 3) case-insensitive base match
+      const hit = [...byBase.entries()].find(([k]) => k.toLowerCase() === base.toLowerCase());
       if (hit) {
-        const key = hit[1];
-        filtered[key] = (allOutputs as any)[key];
+        const [, fullKey] = hit;
+        filtered[base] = (allOutputs as any)[fullKey];
       }
+
+      console.log("SELECTED:", run.includedOutputsSnapshot?.[step.stepId]);
+      console.log("OUTPUT KEYS:", Object.keys(step.outputs?.variables ?? {}));
+
     }
 
     return filtered;
