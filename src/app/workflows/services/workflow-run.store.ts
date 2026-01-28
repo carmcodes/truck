@@ -6,17 +6,11 @@ export type StoredRun = {
   workflowId: number;
   createdAt: string;
   extension: string;
-  result: any; // RunWorkflowResponse
-
-  // ✅ already used for filtering output display
+  result: RunWorkflowResponse;
   includedOutputsSnapshot?: Record<number, string[]>;
-
-  // ✅ uploaded json inputs by step
-  inputsByStepId?: Record<number, Record<string, unknown>>;
-
-  // ✅ NEW: declared vars per step at run time (from scripts)
-  scriptVarsByStepId?: Record<number, string[]>;
+  inputsSnapshotByStepId?: Record<number, Record<string, unknown>>; // ✅ NEW
 };
+
 
 
 function key(workflowId: Id) {

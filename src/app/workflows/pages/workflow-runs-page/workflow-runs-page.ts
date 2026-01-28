@@ -75,65 +75,60 @@ export class WorkflowRunsPage implements OnInit {
     return parts[parts.length - 1] ?? name;
   }
 
-  getCheckedVarsForStep(run: StoredRun, step: RunStepRunDto): Record<string, unknown> {
-    const allOutputs = step.outputs?.variables ?? {};
+  private baseName(name: string): string {
+    // Inputs.AnyAlias.Var1 -> Var1
+    const parts = name.split(".");
+    return parts[parts.length - 1] ?? name;
+  }
 
-    const selected = run.includedOutputsSnapshot?.[step.stepId] ?? null;
+  private buildInputsVisibleForStep(run: StoredRun, stepIndex: number): Record<string, unknown> {
+    const merged: Record<string, unknown> = {};
+    const steps = run.result.stepRuns ?? [];
 
-    // older run: no snapshot -> show whatever backend returned
-    if (!selected) return allOutputs;
-
-    // user selected none
-    if (selected.length === 0) return {};
-
-    // Build lookup:
-    // - exact key match (full)
-    // - base-name match (Var1) for inputs where alias can differ
-    const exact = new Map<string, string>();
-    const byBase = new Map<string, string>();
-
-    for (const fullKey of Object.keys(allOutputs)) {
-      exact.set(fullKey, fullKey);
-
-      const base = this.normalizeVarName(fullKey);
-      // if multiple keys share same base, prefer the "Inputs." one when selection is an input
-      if (!byBase.has(base)) byBase.set(base, fullKey);
-      if (fullKey.startsWith("Inputs.") && !byBase.get(base)?.startsWith("Inputs.")) {
-        byBase.set(base, fullKey);
-      }
+    for (let i = 0; i <= stepIndex; i++) {
+      const sid = steps[i]?.stepId;
+      if (!sid) continue;
+      Object.assign(merged, run.inputsSnapshotByStepId?.[sid] ?? {});
     }
 
-    const filtered: Record<string, unknown> = {};
+    return merged;
+  }
+
+  getCheckedVarsForStep(run: StoredRun, step: RunStepRunDto, stepIndex: number): Record<string, unknown> {
+    const selected = run.includedOutputsSnapshot?.[step.stepId] ?? [];
+    if (selected.length === 0) return {}; // "no selected variables" case
+
+    const outVars = step.outputs?.variables ?? {};
+    const inputsVisible = this.buildInputsVisibleForStep(run, stepIndex);
+
+    // lookup maps
+    const outByBase = new Map<string, string>();
+    for (const k of Object.keys(outVars)) outByBase.set(this.baseName(k), k);
+
+    const result: Record<string, unknown> = {};
 
     for (const sel of selected) {
-      // 1) exact match (when you stored full key)
-      const fullExact = exact.get(sel);
-      if (fullExact) {
-        filtered[this.normalizeVarName(fullExact)] = (allOutputs as any)[fullExact];
+      const base = this.baseName(sel);
+
+      // 1) Prefer actual run outputs if present
+      const outKey = outVars[sel as any] !== undefined ? sel : outByBase.get(base);
+      if (outKey && (outVars as any)[outKey] !== undefined) {
+        result[base] = (outVars as any)[outKey];
         continue;
       }
 
-      // 2) base-name match (when you stored Var1, or alias changed)
-      const base = this.normalizeVarName(sel);
-      const full = byBase.get(base) ?? byBase.get(base.toLowerCase());
-      if (full) {
-        filtered[base] = (allOutputs as any)[full];
+      // 2) Otherwise pull from inputs snapshot (uploaded files)
+      if (base in inputsVisible) {
+        result[base] = (inputsVisible as any)[base];
         continue;
       }
 
-      // 3) case-insensitive base match
-      const hit = [...byBase.entries()].find(([k]) => k.toLowerCase() === base.toLowerCase());
-      if (hit) {
-        const [, fullKey] = hit;
-        filtered[base] = (allOutputs as any)[fullKey];
-      }
-
-      console.log("SELECTED:", run.includedOutputsSnapshot?.[step.stepId]);
-      console.log("OUTPUT KEYS:", Object.keys(step.outputs?.variables ?? {}));
-
+      // 3) Last resort: case-insensitive match in inputs
+      const hit = Object.keys(inputsVisible).find(k => k.toLowerCase() === base.toLowerCase());
+      if (hit) result[base] = (inputsVisible as any)[hit];
     }
 
-    return filtered;
+    return result;
   }
 
   /** Convert vars object into display rows */

@@ -828,6 +828,12 @@ export class WorkflowsFacade {
 // 3) ✅ also persist uploaded inputs if you’re using them in Runs page
       const inputsByStepId = this.inputsByStepId(); // Record<stepId, {...}>
 
+      // inside WorkflowsFacade.runWorkflow(), right before saveRun(...)
+      const inputsSnapshotByStepId: Record<number, Record<string, unknown>> = {};
+      for (const step of this.stepsState()) {
+        inputsSnapshotByStepId[step.id] = this.getInputsVisibleAtStep(step.id);
+      }
+
       saveRun(wf.id, {
         runId: crypto.randomUUID(),
         workflowId: wf.id,
@@ -835,9 +841,9 @@ export class WorkflowsFacade {
         extension,
         result: res,
         includedOutputsSnapshot,
-        inputsByStepId,
-        scriptVarsByStepId,
+        inputsSnapshotByStepId, // ✅ NEW
       });
+
 
 
       console.log('✅ Run saved successfully');

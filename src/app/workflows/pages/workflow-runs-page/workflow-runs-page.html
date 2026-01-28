@@ -114,7 +114,7 @@
                         </div>
                       </div>
 
-                      @let rows = toVarRows(getCheckedVarsForStep(selectedRun()!, s));
+                      @let checked = toVarRows(getCheckedVarsForStep(run, s, $index));
 
                       @if (rows.length === 0) {
                         <div style="padding:12px; opacity:.7;">No selected variables.</div>
