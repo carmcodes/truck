@@ -384,37 +384,54 @@ export class WorkflowsFacade {
     const script = this.getStepScript(step.id);
     const includedOutputs = this.getIncludedOutputs(step.id);
 
+    console.log('💾 SAVING SCRIPT FOR STEP:', {
+      stepId: step.id,
+      stepName: step.name,
+      stepAlias: step.alias,
+      scriptContent: script,
+      scriptLines: script.split('\n'),
+      includedOutputs: includedOutputs,
+      includedOutputsLength: includedOutputs.length
+    });
+
     this.saving.set(true);
     this.error.set(null);
 
     try {
-      await firstValueFrom(
-        this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
+      const payload = {
+        stepId: step.id,
+        script,
+        includedOutputs
+      };
+
+      console.log('📤 Payload being sent to backend:', JSON.stringify(payload, null, 2));
+
+      const response = await firstValueFrom(
+        this.api.uploadStepScript(payload)
       );
+
+      console.log('✅ Backend response:', response);
 
       const wf = this.workflow();
       if (!wf?.id) return;
 
-      // Mark this step's script as saved
       const newStatus = {
         ...this.stepScriptSavedStatus(),
         [step.id]: true
       };
       this.stepScriptSavedStatus.set(newStatus);
-
-      // Persist to localStorage
       this.saveScriptSavedStatusToStorage(wf.id, newStatus);
 
       console.log(`✅ Script saved and locked for step ${step.id}`);
 
       await this.refreshSteps();
     } catch (e: any) {
+      console.error('❌ Failed to save script:', e);
       this.error.set(e?.message ?? "Failed to save script");
     } finally {
       this.saving.set(false);
     }
   }
-
   unlockStepScript(stepId: number) {
     const wf = this.workflow();
     if (!wf?.id) return;
@@ -773,17 +790,43 @@ export class WorkflowsFacade {
     this.error.set(null);
 
     try {
-      console.log('▶️ Running workflow...');
+      console.log('▶️ RUNNING WORKFLOW...');
+      console.log('📋 Current workflow state:');
 
-      // Call backend to run workflow
-      const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
+      for (const step of this.stepsState()) {
+        const script = this.getStepScript(step.id);
+        const includedOutputs = this.getIncludedOutputs(step.id);
+        console.log(`  Step ${step.id} (${step.name}):`, {
+          hasScript: !!script,
+          scriptLength: script?.length,
+          scriptPreview: script?.substring(0, 50),
+          includedOutputs,
+          isSaved: this.isStepScriptSaved(step.id)
+        });
+      }
 
-      console.log('📊 Backend run result:', res);
+      const runPayload = { workflowId: wf.id, extension };
+      console.log('📤 Running workflow with payload:', runPayload);
+
+      const res = await firstValueFrom(this.api.runWorkflow(runPayload));
+
+      console.log('📊 BACKEND RUN RESULT:', res);
+      console.log('📊 Step runs details:');
+      res.stepRuns?.forEach((stepRun, idx) => {
+        console.log(`  Step ${idx} (ID: ${stepRun.stepId}, Name: ${stepRun.stepName}):`, {
+          status: stepRun.status,
+          cached: stepRun.cached,
+          hasOutputs: !!stepRun.outputs,
+          outputsObject: stepRun.outputs,
+          variables: stepRun.outputs?.variables,
+          variableKeys: Object.keys(stepRun.outputs?.variables ?? {}),
+          logs: stepRun.logs?.substring(0, 100)
+        });
+      });
 
       this.lastRun.set(res);
       this.lastRunExtension.set(extension);
 
-      // Capture snapshots at run time
       const includedOutputsSnapshot: Record<number, string[]> = {};
       for (const step of this.stepsState()) {
         const outputs = this.getIncludedOutputs(step.id);
@@ -792,12 +835,11 @@ export class WorkflowsFacade {
 
       const inputsByStepId = { ...this.inputsByStepId() };
 
-      console.log('📸 Capturing run snapshot:', {
+      console.log('📸 CAPTURING RUN SNAPSHOT:', {
         includedOutputsSnapshot,
         inputsByStepId
       });
 
-      // Save run to localStorage
       const runToSave: StoredRun = {
         runId: crypto.randomUUID(),
         workflowId: wf.id,
@@ -808,7 +850,7 @@ export class WorkflowsFacade {
         inputsByStepId,
       };
 
-      console.log('💾 Saving run:', runToSave);
+      console.log('💾 SAVING RUN TO LOCALSTORAGE:', runToSave);
       saveRun(wf.id, runToSave);
 
       console.log('✅ Run saved successfully');
