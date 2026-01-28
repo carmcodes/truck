@@ -16,7 +16,7 @@ import { WorkflowApi } from "./workflows.api";
 
 import type { WorkflowVar } from "../components/monaco-step-editor/workflow-vars";
 import { extractVarsFromCode } from "../components/monaco-step-editor/script-vars";
-import { saveRun } from "./workflow-run.store";
+import {saveRun, StoredRun} from "./workflow-run.store";
 
 @Injectable({ providedIn: "root" })
 export class WorkflowsFacade {
@@ -444,10 +444,21 @@ export class WorkflowsFacade {
     console.log(`🗑️ Cleared inputs for step ${stepId}`);
   }
 
+  // In WorkflowsFacade
   async uploadSelectedStepInput(file: File) {
     const step = this.selectedStep();
     const wf = this.workflow();
-    if (!step || !wf?.id) return;
+    if (!step || !wf?.id) {
+      console.error('❌ Cannot upload: step or workflow missing', { step, wf });
+      return;
+    }
+
+    console.log('📤 Uploading input file:', {
+      stepId: step.id,
+      fileName: file.name,
+      fileSize: file.size,
+      workflowId: wf.id
+    });
 
     this.saving.set(true);
     this.error.set(null);
@@ -455,19 +466,26 @@ export class WorkflowsFacade {
     try {
       const res = await firstValueFrom(this.api.uploadStepInput(step.id, file));
 
+      console.log('📥 Backend response:', res);
+      console.log('📥 Response inputs:', res.inputs);
+
       const next = { ...this.inputsByStepId() };
       next[step.id] = { ...(next[step.id] ?? {}), ...(res.inputs ?? {}) };
-      this.inputsByStepId.set(next);
 
+      console.log('💾 Updated inputsByStepId:', next);
+
+      this.inputsByStepId.set(next);
       this.saveInputsToStorage(wf.id, next);
 
+      console.log('✅ Inputs saved to state and localStorage');
+
     } catch (e: any) {
+      console.error('❌ Upload error:', e);
       this.error.set(e?.message ?? "Failed to upload input");
     } finally {
       this.saving.set(false);
     }
   }
-
   async loadExportTypes() {
     try {
       const types = await firstValueFrom(this.api.getExportTypes());
@@ -477,76 +495,6 @@ export class WorkflowsFacade {
     }
   }
 
-  async runWorkflow(extension: string) {
-    const wf = this.workflow();
-    if (!wf?.id) return;
-
-    if (this.hasAnySyntaxErrors()) {
-      this.error.set("Fix syntax errors before running. " + (this.getFirstSyntaxError() ?? ""));
-      return;
-    }
-
-    const stepsWithScripts = this.stepsState().filter(step => {
-      const script = this.getStepScript(step.id);
-      return script && script.trim() !== '';
-    });
-
-    const unsavedSteps = stepsWithScripts.filter(step => !this.isStepScriptSaved(step.id));
-
-    if (unsavedSteps.length > 0) {
-      this.error.set(
-        `Please save scripts for: ${unsavedSteps.map(s => s.name).join(', ')}`
-      );
-      return;
-    }
-
-    this.running.set(true);
-    this.error.set(null);
-
-    try {
-      console.log('▶️ Running workflow...');
-      const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
-      console.log('📊 Backend response:', res);
-
-      this.lastRun.set(res);
-      this.lastRunExtension.set(extension);
-
-      // Capture snapshots
-      const includedOutputsSnapshot: Record<number, string[]> = {};
-      for (const step of this.stepsState()) {
-        const outputs = this.getIncludedOutputs(step.id);
-        includedOutputsSnapshot[step.id] = outputs;
-      }
-
-      const inputsByStepId = { ...this.inputsByStepId() };
-
-      console.log('📸 Snapshots to save:', {
-        includedOutputsSnapshot,
-        inputsByStepId,
-        stepsCount: this.stepsState().length
-      });
-
-      const runToSave: StoredRun = {
-        runId: crypto.randomUUID(),
-        workflowId: wf.id,
-        createdAt: new Date().toISOString(),
-        extension,
-        result: res,
-        includedOutputsSnapshot,
-        inputsByStepId,
-      };
-
-      console.log('💾 Saving run:', runToSave);
-      saveRun(wf.id, runToSave);
-
-      console.log('✅ Run saved successfully');
-    } catch (e: any) {
-      console.error('❌ Run failed:', e);
-      this.error.set(e?.message ?? "Failed to run workflow");
-    } finally {
-      this.running.set(false);
-    }
-  }
   // Add localStorage methods for scripts
   private getScriptsStorageKey(workflowId: number): string {
     return `workflow_${workflowId}_scripts`;
@@ -750,6 +698,125 @@ export class WorkflowsFacade {
       this.error.set(e?.message ?? "Failed to save workflow");
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  // Add these helper methods to WorkflowsFacade
+
+// Get all variables available at a step (file inputs + script variables from current and previous steps)
+  getAvailableVariablesAtStep(stepId: number): WorkflowVar[] {
+    const steps = this.stepsState();
+    const idx = steps.findIndex(s => s.id === stepId);
+    if (idx < 0) return [];
+
+    const vars: WorkflowVar[] = [];
+    const varMap = new Map<string, WorkflowVar>();
+
+    // 1. Add file inputs from all steps up to and including current step
+    const byStep = this.inputsByStepId();
+    for (let i = 0; i <= idx; i++) {
+      const step = steps[i];
+      const stepInputs = byStep[step.id] ?? {};
+      const stepAlias = step.alias || `step${i + 1}`;
+
+      for (const varName of Object.keys(stepInputs)) {
+        const fullName = `Inputs.${stepAlias}.${varName}`;
+        varMap.set(fullName, {
+          name: fullName,
+          kind: "unknown",
+          source: "input",
+          stepId: step.id
+        } as WorkflowVar);
+      }
+    }
+
+    // 2. Add script-declared variables from all steps up to and including current step
+    const varsByStep = this.stepVarsByStepId();
+    for (let i = 0; i <= idx; i++) {
+      const sid = steps[i].id;
+      const stepVars = varsByStep[sid];
+      if (!stepVars) continue;
+
+      for (const v of Object.values(stepVars)) {
+        varMap.set(v.name, v);
+      }
+    }
+
+    return [...varMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+// Ensure runWorkflow captures all necessary data
+  async runWorkflow(extension: string) {
+    const wf = this.workflow();
+    if (!wf?.id) return;
+
+    if (this.hasAnySyntaxErrors()) {
+      this.error.set("Fix syntax errors before running. " + (this.getFirstSyntaxError() ?? ""));
+      return;
+    }
+
+    const stepsWithScripts = this.stepsState().filter(step => {
+      const script = this.getStepScript(step.id);
+      return script && script.trim() !== '';
+    });
+
+    const unsavedSteps = stepsWithScripts.filter(step => !this.isStepScriptSaved(step.id));
+
+    if (unsavedSteps.length > 0) {
+      this.error.set(
+        `Please save scripts for: ${unsavedSteps.map(s => s.name).join(', ')}`
+      );
+      return;
+    }
+
+    this.running.set(true);
+    this.error.set(null);
+
+    try {
+      console.log('▶️ Running workflow...');
+
+      // Call backend to run workflow
+      const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
+
+      console.log('📊 Backend run result:', res);
+
+      this.lastRun.set(res);
+      this.lastRunExtension.set(extension);
+
+      // Capture snapshots at run time
+      const includedOutputsSnapshot: Record<number, string[]> = {};
+      for (const step of this.stepsState()) {
+        const outputs = this.getIncludedOutputs(step.id);
+        includedOutputsSnapshot[step.id] = outputs;
+      }
+
+      const inputsByStepId = { ...this.inputsByStepId() };
+
+      console.log('📸 Capturing run snapshot:', {
+        includedOutputsSnapshot,
+        inputsByStepId
+      });
+
+      // Save run to localStorage
+      const runToSave: StoredRun = {
+        runId: crypto.randomUUID(),
+        workflowId: wf.id,
+        createdAt: new Date().toISOString(),
+        extension,
+        result: res,
+        includedOutputsSnapshot,
+        inputsByStepId,
+      };
+
+      console.log('💾 Saving run:', runToSave);
+      saveRun(wf.id, runToSave);
+
+      console.log('✅ Run saved successfully');
+    } catch (e: any) {
+      console.error('❌ Run failed:', e);
+      this.error.set(e?.message ?? "Failed to run workflow");
+    } finally {
+      this.running.set(false);
     }
   }
 }

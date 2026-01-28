@@ -1,3 +1,4 @@
+<!-- workflow-runs-page.html -->
 <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; margin-top: 15px">
   <div>
     <h2 style="margin:0;">Runs</h2>
@@ -11,6 +12,7 @@
 </div>
 
 <div style="display:grid; grid-template-columns: 280px 1fr; gap:12px; height: calc(100vh - 170px);">
+  <!-- Run History Sidebar -->
   <div style="border:1px solid #ddd; border-radius:12px; padding:10px; overflow:auto; background:#fff;">
     <div style="font-weight:800; margin-bottom:8px;">Run history</div>
 
@@ -38,6 +40,7 @@
     }
   </div>
 
+  <!-- Run Details -->
   <div style="border:1px solid #ddd; border-radius:12px; padding:12px; overflow:auto; background:#fff;">
     @if (!selectedRun()) {
       <div style="opacity:.7;">Select a run to view details.</div>
@@ -46,19 +49,21 @@
     @if (selectedRun(); as run) {
       <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
         <div>
-          <div style="font-weight:900; font-size:16px;">Run</div>
+          <div style="font-weight:900; font-size:16px;">Run Details</div>
           <div style="font-size:12px; opacity:.7;">
             {{ run.createdAt | date:'short' }} • extension: {{ run.extension }}
           </div>
         </div>
       </div>
 
+      <!-- Steps -->
       <div style="border:1px solid #eee; border-radius:12px; overflow:hidden;">
         @for (step of run.result.stepRuns; track step.stepId; let i = $index) {
-
+          <!-- Step Header -->
           <div
             (click)="toggleStep(step.stepId)"
-            style="padding:12px; border-bottom:1px solid #eee; cursor:pointer;"
+            style="padding:12px; border-bottom:1px solid #eee; cursor:pointer; background: #fafafa;"
+            [style.background]="expandedStepId() === step.stepId ? '#fff' : '#fafafa'"
           >
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <div style="min-width:0;">
@@ -79,43 +84,44 @@
             </div>
           </div>
 
+          <!-- Step Details (when expanded) -->
           @if (expandedStepId() === step.stepId) {
-            @let inVars = toVarRows(getInputVarsForStep(run, i, step.stepId));
-            @let outVars = toVarRows(getOutputVars(step));
-            @let lines = logLines(step.logs);
+            @let inputVars = toVarRows(getInputVarsForStep(run, i, step.stepId));
+            @let outputVars = toVarRows(getOutputVarsForStep(step));
+            @let logLinesArray = logLines(step.logs);
 
-            <div style="padding:12px; border-bottom:1px solid #eee; background:#fafafa;">
+            <div style="padding:12px; border-bottom:1px solid #eee; background:#fff;">
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-
-                <div style="background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden;">
-                  <div style="padding:10px 12px; border-bottom:1px solid #eee;">
-                    <div style="font-weight:900;">Input variables</div>
+                <!-- Input Variables -->
+                <div style="background:#fafafa; border:1px solid #eee; border-radius:12px; overflow:hidden;">
+                  <div style="padding:10px 12px; border-bottom:1px solid #eee; background:#fff;">
+                    <div style="font-weight:900;">Input Variables</div>
                     <div style="font-size:12px; opacity:.7; margin-top:2px;">
-                      Derived from previous step outputs
+                      File inputs + selected outputs from previous steps
                     </div>
                   </div>
 
-                  @if (inVars.length === 0) {
+                  @if (inputVars.length === 0) {
                     <div style="padding:12px; opacity:.7;">No input variables.</div>
                   } @else {
                     <div style="max-height:220px; overflow:auto;">
                       <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                        <thead style="position:sticky; top:0; background:#fafafa;">
+                        <thead style="position:sticky; top:0; background:#f5f5f5;">
                         <tr>
-                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Name</th>
-                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Value</th>
-                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Type</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-weight:700;">Name</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-weight:700;">Value</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-weight:700;">Type</th>
                         </tr>
                         </thead>
                         <tbody>
-                          @for (r of inVars; track r.key) {
+                          @for (row of inputVars; track row.key) {
                             <tr>
-                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2;"><code>{{ r.key }}</code></td>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2;"><code style="font-size:11px;">{{ row.key }}</code></td>
                               <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px;">
-                                {{ r.value }}
+                                {{ row.value }}
                               </td>
                               <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; opacity:.7;">
-                                {{ r.type }}
+                                {{ row.type }}
                               </td>
                             </tr>
                           }
@@ -125,35 +131,36 @@
                   }
                 </div>
 
-                <div style="background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden;">
-                  <div style="padding:10px 12px; border-bottom:1px solid #eee;">
-                    <div style="font-weight:900;">Output variables</div>
+                <!-- Output Variables -->
+                <div style="background:#fafafa; border:1px solid #eee; border-radius:12px; overflow:hidden;">
+                  <div style="padding:10px 12px; border-bottom:1px solid #eee; background:#fff;">
+                    <div style="font-weight:900;">Output Variables</div>
                     <div style="font-size:12px; opacity:.7; margin-top:2px;">
-                      From this step’s execution
+                      Selected variables from this step
                     </div>
                   </div>
 
-                  @if (outVars.length === 0) {
-                    <div style="padding:12px; opacity:.7;">No output variables.</div>
+                  @if (outputVars.length === 0) {
+                    <div style="padding:12px; opacity:.7;">No output variables selected.</div>
                   } @else {
                     <div style="max-height:220px; overflow:auto;">
                       <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                        <thead style="position:sticky; top:0; background:#fafafa;">
+                        <thead style="position:sticky; top:0; background:#f5f5f5;">
                         <tr>
-                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Name</th>
-                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Value</th>
-                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee;">Type</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-weight:700;">Name</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-weight:700;">Value</th>
+                          <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-weight:700;">Type</th>
                         </tr>
                         </thead>
                         <tbody>
-                          @for (r of outVars; track r.key) {
+                          @for (row of outputVars; track row.key) {
                             <tr>
-                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2;"><code>{{ r.key }}</code></td>
+                              <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2;"><code style="font-size:11px;">{{ row.key }}</code></td>
                               <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px;">
-                                {{ r.value }}
+                                {{ row.value }}
                               </td>
                               <td style="padding:8px 10px; border-bottom:1px solid #f2f2f2; opacity:.7;">
-                                {{ r.type }}
+                                {{ row.type }}
                               </td>
                             </tr>
                           }
@@ -164,9 +171,10 @@
                 </div>
               </div>
 
+              <!-- Logs -->
               <div style="margin-top:12px; background:#0b0f14; border-radius:12px; padding:10px; color:#e6edf3;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                  <div style="font-weight:900;">Logs</div>
+                  <div style="font-weight:900;">Execution Logs</div>
                   <ds-button
                     style="font-size:12px;"
                     (click)="$event.stopPropagation(); navigator.clipboard.writeText(step.logs || '')"
@@ -175,11 +183,11 @@
                   </ds-button>
                 </div>
 
-                @if (lines.length === 0) {
+                @if (logLinesArray.length === 0) {
                   <div style="opacity:.7;">No logs.</div>
                 } @else {
                   <div style="max-height:260px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size:12px; line-height:1.45;">
-                    @for (ln of lines; track $index) {
+                    @for (ln of logLinesArray; track $index) {
                       <div style="display:flex; gap:12px;">
                         <div style="width:36px; text-align:right; opacity:.45;">{{ $index + 1 }}</div>
                         <div style="white-space:pre-wrap; word-break:break-word; flex:1;">{{ ln }}</div>
@@ -187,10 +195,6 @@
                     }
                   </div>
                 }
-              </div>
-
-              <div style="font-size:12px; opacity:.7; margin-top:10px;">
-                exportFile: {{ step.exportFile ? (step.exportFile | json) : "null" }}
               </div>
             </div>
           }
