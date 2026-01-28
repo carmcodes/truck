@@ -1,6 +1,5 @@
 import {Component, EventEmitter, Input, Output, signal, OnChanges, SimpleChanges, OnDestroy} from "@angular/core";
 import type { StepDto, Id } from "../../models/workflow-models";
-import {WorkflowVar} from "../monaco-step-editor/workflow-vars";
 import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
 
 @Component({
@@ -34,21 +33,21 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
           <div style="grid-column: 1 / -1;">
             <label ds-label style="font-size:12px; font-weight:800;">Alias</label>
             <input ds-input
-                   style="width:100%; border: 1px solid; padding: 6px;"
-                   [style.border-color]="aliasError() ? '#b00020' : '#ccc'"
-                   [value]="currentAliasValue()"
-                   (input)="handleAliasInput($any($event.target).value)"
+                style="width:100%; border: 1px solid; padding: 6px;"
+                [style.border-color]="aliasError() ? '#b00020' : '#ccc'"
+                [value]="currentAliasValue()"
+                (input)="handleAliasInput($any($event.target).value)"
             />
             <div style="font-size:12px; margin-top:6px; line-height:1.35;">
               @if(aliasError()){
                 <span style="color: #b00020; font-weight: 600;">⚠ Alias cannot contain spaces. Use underscores or camelCase instead.</span>
               } @else {
                 <span style="opacity:.7;">
-                  This alias is used for namespacing inputs and outputs in run results:
-                  <code style="background:#fafafa; padding:1px 6px; border-radius:8px; border:1px solid #eee;">
-                    Inputs.{{ step.alias || "ALIAS" }}.*
-                  </code>
-                </span>
+                    This alias is used for namespacing inputs and outputs in run results:
+                    <code style="background:#fafafa; padding:1px 6px; border-radius:8px; border:1px solid #eee;">
+                      Inputs.{{ step.alias || "ALIAS" }}.*
+                    </code>
+                  </span>
               }
             </div>
           </div>
@@ -65,22 +64,18 @@ import {DsCheckboxModule, DsFormFieldModule} from "@bmw-ds/components";
           </div>
 
           <div>
-            <ds-form-field>
-              <label ds-label style="font-size:12px; font-weight:600;">Cacheable</label>
-              <input
-                type="checkbox"
-                [checked]="step.cacheable"
-                [disabled]="isUpdating()"
-                (change)="handleCacheableChange($any($event.target).checked)"
-              />
-            </ds-form-field>
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;">Cacheable</label>
+            <input
+                   type="checkbox"
+                   [checked]="step.cacheable"
+                   [disabled]="isUpdating()"
+                   (change)="handleCacheableChange($any($event.target).checked)"
+            />
           </div>
 
           <div>
-            <ds-form-field>
-              <label ds-label style="font-size:12px; font-weight:600;">Runnable</label>
-            </ds-form-field>
-            <div style="font-size:12px; opacity:.75; margin-top:6px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;">Runnable</label>
+            <div style="font-size:12px; opacity:.75;">
               {{ step.runnable ? "Yes" : "No" }}
             </div>
           </div>
@@ -101,6 +96,7 @@ export class StepConfigPanelComponent implements OnChanges, OnDestroy {
   lastValidAlias = signal<string>('');
 
   isUpdating = signal<boolean>(false);
+  lastCacheableValue = signal<boolean>(false);
   private updateTimer: any;
   private currentStepId: number | null = null;
 
@@ -112,7 +108,9 @@ export class StepConfigPanelComponent implements OnChanges, OnDestroy {
         this.lastValidAlias.set(alias);
         this.aliasError.set(alias.includes(' '));
 
-        // Reset updating flag when step changes
+        // Track the last cacheable value from the backend
+        this.lastCacheableValue.set(this.step.cacheable);
+
         if (this.currentStepId !== this.step.id) {
           this.currentStepId = this.step.id;
           this.isUpdating.set(false);
@@ -146,32 +144,47 @@ export class StepConfigPanelComponent implements OnChanges, OnDestroy {
   }
 
   handleCacheableChange(checked: boolean) {
-    if (!this.step || this.isUpdating()) return;
+    if (!this.step) return;
 
-    console.log('🔘 Cacheable change:', {
-      checked,
-      stepCacheable: this.step.cacheable,
-      isUpdating: this.isUpdating()
+    console.log('🔘 Cacheable checkbox clicked:', {
+      newValue: checked,
+      currentStepValue: this.step.cacheable,
+      lastTrackedValue: this.lastCacheableValue(),
+      willUpdate: checked !== this.step.cacheable
     });
 
-    // Prevent rapid clicks
-    this.isUpdating.set(true);
+    // Only emit if the value is different from what the backend has
+    if (checked === this.step.cacheable) {
+      console.log('⏭️ Skipping - value unchanged from backend');
+      return;
+    }
 
-    // Clear any pending update
+    // Prevent rapid clicks
+    if (this.isUpdating()) {
+      console.log('⏭️ Skipping - already updating');
+      return;
+    }
+
+    this.isUpdating.set(true);
     clearTimeout(this.updateTimer);
 
-    // Debounce the update
+    // Small delay to debounce
     this.updateTimer = setTimeout(() => {
+      // Double-check the value hasn't changed
       if (this.step && checked !== this.step.cacheable) {
         console.log('✅ Emitting cacheable patch:', checked);
+        this.lastCacheableValue.set(checked);
         this.emitPatch({ cacheable: checked });
+      } else {
+        console.log('⏭️ Skipping - value synchronized');
       }
 
-      // Re-enable after a delay to allow backend to respond
+      // Re-enable after backend response time
       setTimeout(() => {
         this.isUpdating.set(false);
-      }, 500);
-    }, 100);
+        console.log('🔓 Checkbox re-enabled');
+      }, 1000); // Increased from 500ms to 1000ms
+    }, 200); // Increased from 100ms to 200ms
   }
 
   emitPatch(patch: Partial<StepDto>) {
