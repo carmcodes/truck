@@ -486,7 +486,6 @@ export class WorkflowsFacade {
       return;
     }
 
-    // Check if all steps with scripts are saved
     const stepsWithScripts = this.stepsState().filter(step => {
       const script = this.getStepScript(step.id);
       return script && script.trim() !== '';
@@ -507,32 +506,38 @@ export class WorkflowsFacade {
     try {
       console.log('▶️ Running workflow...');
       const res = await firstValueFrom(this.api.runWorkflow({ workflowId: wf.id, extension }));
+      console.log('📊 Backend response:', res);
+
       this.lastRun.set(res);
       this.lastRunExtension.set(extension);
 
-      // Capture the included outputs snapshot at run time
+      // Capture snapshots
       const includedOutputsSnapshot: Record<number, string[]> = {};
       for (const step of this.stepsState()) {
         const outputs = this.getIncludedOutputs(step.id);
         includedOutputsSnapshot[step.id] = outputs;
       }
 
-      console.log('📸 Included outputs snapshot:', includedOutputsSnapshot);
-      console.log('📊 Run result:', res);
-
-      // ✅ Also capture the inputs snapshot (file inputs)
       const inputsByStepId = { ...this.inputsByStepId() };
-      console.log('📥 Inputs by step ID:', inputsByStepId);
 
-      saveRun(wf.id, {
+      console.log('📸 Snapshots to save:', {
+        includedOutputsSnapshot,
+        inputsByStepId,
+        stepsCount: this.stepsState().length
+      });
+
+      const runToSave: StoredRun = {
         runId: crypto.randomUUID(),
         workflowId: wf.id,
         createdAt: new Date().toISOString(),
         extension,
         result: res,
         includedOutputsSnapshot,
-        inputsByStepId, // ✅ Save file inputs
-      });
+        inputsByStepId,
+      };
+
+      console.log('💾 Saving run:', runToSave);
+      saveRun(wf.id, runToSave);
 
       console.log('✅ Run saved successfully');
     } catch (e: any) {
@@ -685,7 +690,6 @@ export class WorkflowsFacade {
     this.error.set(null);
 
     try {
-      // First, save the workflow metadata
       if (!wf.id || wf.id === 0) {
         const payload: CreateWorkflowRequest = {
           name: wf.name,
@@ -708,7 +712,6 @@ export class WorkflowsFacade {
       const updated = await firstValueFrom(this.api.updateWorkflow(payload));
       this.workflow.set(updated);
 
-      // Save all step scripts with their included outputs
       console.log('💾 Saving all step scripts...');
       const updatedStatus = { ...this.stepScriptSavedStatus() };
 
@@ -716,32 +719,34 @@ export class WorkflowsFacade {
         const script = this.getStepScript(step.id);
         const includedOutputs = this.getIncludedOutputs(step.id);
 
-        // Only save if there's a script
         if (script && script.trim() !== '') {
-          console.log(`💾 Saving step ${step.id} (${step.alias}):`, {
+          const scriptPayload = {
+            stepId: step.id,
+            script,
+            includedOutputs
+          };
+
+          console.log(`💾 Uploading script for step ${step.id}:`, {
+            stepId: step.id,
+            stepName: step.name,
             scriptLength: script.length,
+            script: script.substring(0, 100) + '...', // First 100 chars
             includedOutputs
           });
 
-          await firstValueFrom(
-            this.api.uploadStepScript({ stepId: step.id, script, includedOutputs })
-          );
-
-          // Mark script as saved
+          await firstValueFrom(this.api.uploadStepScript(scriptPayload));
           updatedStatus[step.id] = true;
         }
       }
 
-      // Update and persist saved status for all steps
       this.stepScriptSavedStatus.set(updatedStatus);
       this.saveScriptSavedStatusToStorage(wf.id, updatedStatus);
-
-      // ✅ Refresh steps to get updated state from backend
       await this.refreshSteps();
 
       console.log('✅ Workflow and all scripts saved successfully');
 
     } catch (e: any) {
+      console.error('❌ Save workflow error:', e);
       this.error.set(e?.message ?? "Failed to save workflow");
     } finally {
       this.saving.set(false);
