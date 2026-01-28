@@ -125,29 +125,19 @@ export class WorkflowRunsPage implements OnInit {
     return undefined;
   }
 
-  getCheckedVarsForStep(run: StoredRun, step: RunStepRunDto, stepIndex: number): Record<string, unknown> {
+  getSelectedVarsForDisplay(run: StoredRun, step: RunStepRunDto, stepIndex: number) {
     const selected = run.includedOutputsSnapshot?.[step.stepId] ?? [];
     const outVars = step.outputs?.variables ?? {};
     const inputsVisible = this.buildInputsVisibleForStep(run, stepIndex);
 
-    const result: Record<string, unknown> = {};
-
-    for (const sel of selected) {
-      const v = this.tryPickValue(sel, outVars, inputsVisible);
-
-      // display key: prefer base (so user sees "var1" not "inputs.step4.var1")
-      const displayKey = this.baseName(sel);
-
-      // If it exists, show it (even if null/false/0)
-      if (v !== undefined) result[displayKey] = v;
-    }
-    console.log("inputsSnapshotByStepId", run.inputsSnapshotByStepId);
-    console.log("inputsVisible", this.buildInputsVisibleForStep(run, stepIndex));
-    console.log("selected", run.includedOutputsSnapshot?.[step.stepId]);
-    console.log("outKeys", Object.keys(step.outputs?.variables ?? {}));
-
-
-    return result;
+    return selected.map(sel => {
+      const value = this.tryPickValue(sel, outVars, inputsVisible);
+      return {
+        key: sel,                 // ✅ show exactly what was selected
+        value: value,             // resolved value
+        found: value !== undefined
+      };
+    });
   }
 
   /** Convert vars object into display rows */
