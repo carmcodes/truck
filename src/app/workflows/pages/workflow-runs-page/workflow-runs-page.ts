@@ -72,16 +72,45 @@ export class WorkflowRunsPage implements OnInit {
 
     const selected = run.includedOutputsSnapshot?.[step.stepId] ?? null;
 
-    // If snapshot missing (older runs), fall back to showing all outputs
+    // Older runs: if snapshot missing, show all outputs
     if (!selected) return allOutputs;
 
-    // If snapshot exists but user selected none -> show none (intentional)
+    // User explicitly selected none -> show none
     if (selected.length === 0) return {};
 
     const filtered: Record<string, unknown> = {};
-    for (const key of selected) {
-      if (key in allOutputs) filtered[key] = (allOutputs as any)[key];
+
+    // Build a lookup: "lastSegment" -> fullKey (first win)
+    // Example: Inputs.step1.var1 => lastSegment "var1"
+    const suffixMap = new Map<string, string>();
+    for (const fullKey of Object.keys(allOutputs)) {
+      const last = fullKey.split(".").pop() ?? fullKey;
+      if (!suffixMap.has(last)) suffixMap.set(last, fullKey);
     }
+
+    for (const sel of selected) {
+      // 1) exact match
+      if (sel in allOutputs) {
+        filtered[sel] = (allOutputs as any)[sel];
+        continue;
+      }
+
+      // 2) suffix match (Var1 -> Inputs.alias.Var1)
+      const fullKey = suffixMap.get(sel);
+      if (fullKey) {
+        filtered[sel] = (allOutputs as any)[fullKey];
+        continue;
+      }
+
+      // 3) case-insensitive suffix match (Var1 vs var1)
+      const lower = sel.toLowerCase();
+      const hit = [...suffixMap.entries()].find(([k]) => k.toLowerCase() === lower);
+      if (hit) {
+        const key = hit[1];
+        filtered[key] = (allOutputs as any)[key];
+      }
+    }
+
     return filtered;
   }
 
