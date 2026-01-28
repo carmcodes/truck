@@ -76,8 +76,9 @@ export class WorkflowRunsPage implements OnInit {
   }
 
   private baseName(name: string): string {
-    // Inputs.AnyAlias.Var1 -> Var1
-    const parts = name.split(".");
+    // inputs.step4.var1 -> var1
+    // Inputs.step4.var1 -> var1
+    const parts = (name ?? "").split(".");
     return parts[parts.length - 1] ?? name;
   }
 
@@ -85,48 +86,66 @@ export class WorkflowRunsPage implements OnInit {
     const merged: Record<string, unknown> = {};
     const steps = run.result.stepRuns ?? [];
 
+    // inputs are visible from step 0..current step (inclusive)
     for (let i = 0; i <= stepIndex; i++) {
       const sid = steps[i]?.stepId;
       if (!sid) continue;
       Object.assign(merged, run.inputsSnapshotByStepId?.[sid] ?? {});
     }
-
     return merged;
+  }
+
+  private tryPickValue(
+    selectedKey: string,
+    outVars: Record<string, unknown>,
+    inputsVisible: Record<string, unknown>
+  ): unknown | undefined {
+    const sel = selectedKey;
+    const base = this.baseName(sel);
+
+    // 1) exact in outputs
+    if (sel in outVars) return (outVars as any)[sel];
+
+    // 2) base-name match in outputs (handles i vs inputs.step4.i)
+    for (const k of Object.keys(outVars)) {
+      if (this.baseName(k) === base) return (outVars as any)[k];
+    }
+
+    // 3) exact in inputs snapshot
+    if (sel in inputsVisible) return (inputsVisible as any)[sel];
+
+    // 4) base-name in inputs snapshot (handles inputs.step4.var1 vs var1)
+    if (base in inputsVisible) return (inputsVisible as any)[base];
+
+    // 5) base-name match in inputs snapshot (in case snapshot itself is namespaced)
+    for (const k of Object.keys(inputsVisible)) {
+      if (this.baseName(k) === base) return (inputsVisible as any)[k];
+    }
+
+    return undefined;
   }
 
   getCheckedVarsForStep(run: StoredRun, step: RunStepRunDto, stepIndex: number): Record<string, unknown> {
     const selected = run.includedOutputsSnapshot?.[step.stepId] ?? [];
-    if (selected.length === 0) return {}; // "no selected variables" case
-
     const outVars = step.outputs?.variables ?? {};
     const inputsVisible = this.buildInputsVisibleForStep(run, stepIndex);
-
-    // lookup maps
-    const outByBase = new Map<string, string>();
-    for (const k of Object.keys(outVars)) outByBase.set(this.baseName(k), k);
 
     const result: Record<string, unknown> = {};
 
     for (const sel of selected) {
-      const base = this.baseName(sel);
+      const v = this.tryPickValue(sel, outVars, inputsVisible);
 
-      // 1) Prefer actual run outputs if present
-      const outKey = outVars[sel as any] !== undefined ? sel : outByBase.get(base);
-      if (outKey && (outVars as any)[outKey] !== undefined) {
-        result[base] = (outVars as any)[outKey];
-        continue;
-      }
+      // display key: prefer base (so user sees "var1" not "inputs.step4.var1")
+      const displayKey = this.baseName(sel);
 
-      // 2) Otherwise pull from inputs snapshot (uploaded files)
-      if (base in inputsVisible) {
-        result[base] = (inputsVisible as any)[base];
-        continue;
-      }
-
-      // 3) Last resort: case-insensitive match in inputs
-      const hit = Object.keys(inputsVisible).find(k => k.toLowerCase() === base.toLowerCase());
-      if (hit) result[base] = (inputsVisible as any)[hit];
+      // If it exists, show it (even if null/false/0)
+      if (v !== undefined) result[displayKey] = v;
     }
+    console.log("inputsSnapshotByStepId", run.inputsSnapshotByStepId);
+    console.log("inputsVisible", this.buildInputsVisibleForStep(run, stepIndex));
+    console.log("selected", run.includedOutputsSnapshot?.[step.stepId]);
+    console.log("outKeys", Object.keys(step.outputs?.variables ?? {}));
+
 
     return result;
   }
